@@ -1,0 +1,2897 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>E-Jurnal & Absensi SMKN 1 Tekung</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .fade-in { animation: fadeIn 0.3s ease-in; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .modal-overlay { background: rgba(0,0,0,0.5); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+    
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // ==========================================
+        // DATABASE & STORAGE
+        // ==========================================
+        const DB = {
+            getItem: (key) => {
+                const data = localStorage.getItem(key);
+                return data ? JSON.parse(data) : [];
+            },
+            setItem: (key, data) => localStorage.setItem(key, JSON.stringify(data)),
+            
+            getUsers: function() { return this.getItem('ejurnal_users'); },
+            getUserById: function(id) { return this.getUsers().find(u => u.id === id); },
+            getUserByUsername: function(username) { return this.getUsers().find(u => u.username === username); },
+            saveUser: function(user) {
+                const users = this.getUsers();
+                const idx = users.findIndex(u => u.id === user.id);
+                if (idx >= 0) users[idx] = user;
+                else users.push(user);
+                this.setItem('ejurnal_users', users);
+            },
+            deleteUser: function(id) {
+                this.setItem('ejurnal_users', this.getUsers().filter(u => u.id !== id));
+            },
+            
+            getGuru: function() { return this.getItem('ejurnal_guru'); },
+            getGuruById: function(id) { return this.getGuru().find(g => g.id === id); },
+            getGuruByUserId: function(userId) { return this.getGuru().find(g => g.userId === userId); },
+            saveGuru: function(guru) {
+                const list = this.getGuru();
+                const idx = list.findIndex(g => g.id === guru.id);
+                if (idx >= 0) list[idx] = guru;
+                else list.push(guru);
+                this.setItem('ejurnal_guru', list);
+            },
+            deleteGuru: function(id) {
+                const guru = this.getGuruById(id);
+                if (guru) this.deleteUser(guru.userId);
+                this.setItem('ejurnal_guru', this.getGuru().filter(g => g.id !== id));
+            },
+            
+            getKelas: function() { return this.getItem('ejurnal_kelas'); },
+            getKelasById: function(id) { return this.getKelas().find(k => k.id === id); },
+            saveKelas: function(kelas) {
+                const list = this.getKelas();
+                const idx = list.findIndex(k => k.id === kelas.id);
+                if (idx >= 0) list[idx] = kelas;
+                else list.push(kelas);
+                this.setItem('ejurnal_kelas', list);
+            },
+            deleteKelas: function(id) {
+                this.setItem('ejurnal_kelas', this.getKelas().filter(k => k.id !== id));
+            },
+            
+            getSiswa: function() { return this.getItem('ejurnal_siswa'); },
+            getSiswaById: function(id) { return this.getSiswa().find(s => s.id === id); },
+            getSiswaByKelas: function(kelasId) { return this.getSiswa().filter(s => s.kelasId === kelasId); },
+            saveSiswa: function(siswa) {
+                const list = this.getSiswa();
+                const idx = list.findIndex(s => s.id === siswa.id);
+                if (idx >= 0) list[idx] = siswa;
+                else list.push(siswa);
+                this.setItem('ejurnal_siswa', list);
+            },
+            deleteSiswa: function(id) {
+                this.setItem('ejurnal_siswa', this.getSiswa().filter(s => s.id !== id));
+            },
+            
+            getMapel: function() { return this.getItem('ejurnal_mapel'); },
+            getMapelById: function(id) { return this.getMapel().find(m => m.id === id); },
+            saveMapel: function(mapel) {
+                const list = this.getMapel();
+                const idx = list.findIndex(m => m.id === mapel.id);
+                if (idx >= 0) list[idx] = mapel;
+                else list.push(mapel);
+                this.setItem('ejurnal_mapel', list);
+            },
+            deleteMapel: function(id) {
+                this.setItem('ejurnal_mapel', this.getMapel().filter(m => m.id !== id));
+            },
+            
+            getJamPelajaran: function() { 
+                return this.getItem('ejurnal_jam_pelajaran').sort((a, b) => a.jamKe - b.jamKe); 
+            },
+            saveJamPelajaran: function(jam) {
+                const list = this.getJamPelajaran();
+                const idx = list.findIndex(j => j.id === jam.id);
+                if (idx >= 0) list[idx] = jam;
+                else list.push(jam);
+                this.setItem('ejurnal_jam_pelajaran', list);
+            },
+            deleteJamPelajaran: function(id) {
+                this.setItem('ejurnal_jam_pelajaran', this.getJamPelajaran().filter(j => j.id !== id));
+            },
+            
+            getJadwal: function() { return this.getItem('ejurnal_jadwal'); },
+            getJadwalById: function(id) { return this.getJadwal().find(j => j.id === id); },
+            getJadwalByGuru: function(guruId) { return this.getJadwal().filter(j => j.guruId === guruId); },
+            getJadwalByKelas: function(kelasId) { return this.getJadwal().filter(j => j.kelasId === kelasId); },
+            saveJadwal: function(jadwal) {
+                const list = this.getJadwal();
+                const idx = list.findIndex(j => j.id === jadwal.id);
+                if (idx >= 0) list[idx] = jadwal;
+                else list.push(jadwal);
+                this.setItem('ejurnal_jadwal', list);
+            },
+            deleteJadwal: function(id) {
+                this.setItem('ejurnal_jadwal', this.getJadwal().filter(j => j.id !== id));
+            },
+            
+            getAbsensi: function() { return this.getItem('ejurnal_absensi'); },
+            getAbsensiById: function(id) { return this.getAbsensi().find(a => a.id === id); },
+            getAbsensiByGuru: function(guruId) { return this.getAbsensi().filter(a => a.guruId === guruId); },
+            saveAbsensi: function(absensi) {
+                const list = this.getAbsensi();
+                const idx = list.findIndex(a => a.id === absensi.id);
+                if (idx >= 0) list[idx] = absensi;
+                else list.push(absensi);
+                this.setItem('ejurnal_absensi', list);
+            },
+            deleteAbsensi: function(id) {
+                this.setItem('ejurnal_absensi', this.getAbsensi().filter(a => a.id !== id));
+            },
+            
+            getJurnal: function() { return this.getItem('ejurnal_jurnal'); },
+            getJurnalById: function(id) { return this.getJurnal().find(j => j.id === id); },
+            getJurnalByGuru: function(guruId) { return this.getJurnal().filter(j => j.guruId === guruId); },
+            saveJurnal: function(jurnal) {
+                const list = this.getJurnal();
+                const idx = list.findIndex(j => j.id === jurnal.id);
+                if (idx >= 0) list[idx] = jurnal;
+                else list.push(jurnal);
+                this.setItem('ejurnal_jurnal', list);
+            },
+            deleteJurnal: function(id) {
+                this.setItem('ejurnal_jurnal', this.getJurnal().filter(j => j.id !== id));
+            },
+            
+            getNilai: function() { return this.getItem('ejurnal_nilai'); },
+            getNilaiBySiswa: function(siswaId) { return this.getNilai().filter(n => n.siswaId === siswaId); },
+            saveNilai: function(nilai) {
+                const list = this.getNilai();
+                const idx = list.findIndex(n => n.id === nilai.id);
+                if (idx >= 0) list[idx] = nilai;
+                else list.push(nilai);
+                this.setItem('ejurnal_nilai', list);
+            },
+            
+            getSetting: function() {
+                const s = localStorage.getItem('ejurnal_setting');
+                return s ? JSON.parse(s) : { 
+                    id: '1',
+                    namaSekolah: 'SMK Negeri 1 Tekung', 
+                    deskripsiAplikasi: 'Sistem E-Jurnal dan Absensi KBM Guru',
+                    logoSekolah: '',
+                    alamatSekolah: 'Jl. Raya Tekung, Lumajang, Jawa Timur',
+                    teleponSekolah: '(0333) 123456',
+                    emailSekolah: 'smkn1tekung@sch.id',
+                    tahunAjaranDefault: '2024/2025', 
+                    semesterDefault: 'Ganjil',
+                    updatedAt: new Date().toISOString()
+                };
+            },
+            saveSetting: function(setting) {
+                localStorage.setItem('ejurnal_setting', JSON.stringify(setting));
+            },
+            
+            getCurrentUser: function() {
+                const u = localStorage.getItem('ejurnal_current_user');
+                return u ? JSON.parse(u) : null;
+            },
+            setCurrentUser: function(user) {
+                if (user) localStorage.setItem('ejurnal_current_user', JSON.stringify(user));
+                else localStorage.removeItem('ejurnal_current_user');
+            },
+            
+            initialize: function() {
+                if (this.getUsers().length === 0) {
+                    this.saveUser({ 
+                        id: 'admin-1', 
+                        username: 'admin', 
+                        password: 'admin123', 
+                        role: 'admin', 
+                        nama: 'Administrator', 
+                        email: 'admin@smkn1tekung.sch.id', 
+                        createdAt: new Date().toISOString() 
+                    });
+                    
+                    this.saveUser({ 
+                        id: 'guru-user-1', 
+                        username: 'guru', 
+                        password: 'guru123', 
+                        role: 'guru', 
+                        nama: 'Budi Santoso, S.Pd.', 
+                        email: 'budi@smkn1tekung.sch.id', 
+                        createdAt: new Date().toISOString() 
+                    });
+                    this.saveGuru({ 
+                        id: 'guru-1', 
+                        userId: 'guru-user-1', 
+                        nip: '198501152010011002', 
+                        nama: 'Budi Santoso, S.Pd.', 
+                        email: 'budi@smkn1tekung.sch.id',
+                        noTelepon: '081234567890',
+                        alamat: 'Jl. Mawar No. 123, Lumajang',
+                        jenisKelamin: 'L',
+                        tanggalLahir: '1985-01-15',
+                        pendidikan: 'S1 Pendidikan Teknik Informatika',
+                        status: 'aktif', 
+                        createdAt: new Date().toISOString() 
+                    });
+                    
+                    const defaultJam = [
+                        { jamKe: 1, jamMulai: '07:00', jamSelesai: '07:45' },
+                        { jamKe: 2, jamMulai: '07:45', jamSelesai: '08:30' },
+                        { jamKe: 3, jamMulai: '08:30', jamSelesai: '09:15' },
+                        { jamKe: 4, jamMulai: '09:15', jamSelesai: '10:00' },
+                        { jamKe: 5, jamMulai: '10:15', jamSelesai: '11:00' },
+                        { jamKe: 6, jamMulai: '11:00', jamSelesai: '11:45' },
+                        { jamKe: 7, jamMulai: '11:45', jamSelesai: '12:30' },
+                        { jamKe: 8, jamMulai: '12:30', jamSelesai: '13:15' },
+                        { jamKe: 9, jamMulai: '13:15', jamSelesai: '14:00' },
+                        { jamKe: 10, jamMulai: '14:00', jamSelesai: '14:45' }
+                    ];
+                    defaultJam.forEach(j => this.saveJamPelajaran({ 
+                        id: 'jam-' + Date.now() + '-' + j.jamKe, 
+                        ...j, 
+                        createdAt: new Date().toISOString() 
+                    }));
+                    
+                    this.saveSetting(this.getSetting());
+                }
+            }
+        };
+
+        DB.initialize();
+
+        // ==========================================
+        // ICONS
+        // ==========================================
+        const Icons = {
+            Book: () => React.createElement('svg', { className: 'w-6 h-6', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' }, 
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253' })),
+            User: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z' })),
+            School: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4' })),
+            Users: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z' })),
+            Calendar: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' })),
+            Clock: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' })),
+            Camera: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z' }),
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M15 13a3 3 0 11-6 0 3 3 0 016 0z' })),
+            MapPin: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z' }),
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M15 11a3 3 0 11-6 0 3 3 0 016 0z' })),
+            FileText: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z' })),
+            Chart: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z' })),
+            Download: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4' })),
+            Upload: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12' })),
+            Search: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z' })),
+            Plus: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M12 4v16m8-8H4' })),
+            Edit: () => React.createElement('svg', { className: 'w-4 h-4', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z' })),
+            Trash: () => React.createElement('svg', { className: 'w-4 h-4', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16' })),
+            Check: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M5 13l4 4L19 7' })),
+            X: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M6 18L18 6M6 6l12 12' })),
+            Logout: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1' })),
+            Menu: () => React.createElement('svg', { className: 'w-6 h-6', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M4 6h16M4 12h16M4 18h16' })),
+            Settings: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z' }),
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M15 12a3 3 0 11-6 0 3 3 0 016 0z' })),
+            Award: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V5.5A2.5 2.5 0 109.5 8H12zm-7 4h14M5 12a2 2 0 110-4h14a2 2 0 110 4M5 12v7a2 2 0 002 2h10a2 2 0 002-2v-7' })),
+            History: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' })),
+            Image: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z' })),
+            Eye: () => React.createElement('svg', { className: 'w-5 h-5', fill: 'none', stroke: 'currentColor', viewBox: '0 0 24 24' },
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M15 12a3 3 0 11-6 0 3 3 0 016 0z' }),
+                React.createElement('path', { strokeLinecap: 'round', strokeLinejoin: 'round', strokeWidth: 2, d: 'M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z' })),
+        };
+
+        // ==========================================
+        // MODAL COMPONENT
+        // ==========================================
+        function Modal({ isOpen, onClose, title, children, maxWidth }) {
+            if (!isOpen) return null;
+            const widthClass = maxWidth || 'max-w-2xl';
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 modal-overlay">
+                    <div className={`bg-white rounded-xl shadow-2xl w-full ${widthClass} max-h-[90vh] overflow-auto fade-in`}>
+                        <div className="flex items-center justify-between p-4 border-b">
+                            <h3 className="text-lg font-semibold">{title}</h3>
+                            <button onClick={onClose} className="p-1 hover:bg-gray-100 rounded"><Icons.X /></button>
+                        </div>
+                        <div className="p-4">{children}</div>
+                    </div>
+                </div>
+            );
+        }
+
+
+        // ==========================================
+        // LOGIN COMPONENT
+        // ==========================================
+        function Login({ onLogin }) {
+            const [username, setUsername] = useState('');
+            const [password, setPassword] = useState('');
+            const [error, setError] = useState('');
+            const setting = DB.getSetting();
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                const user = DB.getUserByUsername(username);
+                if (user && user.password === password) {
+                    DB.setCurrentUser(user);
+                    onLogin(user);
+                } else {
+                    setError('Username atau password salah');
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-gradient-to-br from-blue-50 via-indigo-50 to-purple-50 flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md fade-in">
+                        <div className="text-center mb-8">
+                            <div className="w-20 h-20 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl mx-auto mb-4 flex items-center justify-center shadow-lg text-white">
+                                <Icons.Book />
+                            </div>
+                            <h1 className="text-2xl font-bold text-gray-900">E-Jurnal & Absensi</h1>
+                            <p className="text-gray-600 font-medium">{setting.namaSekolah}</p>
+                            <p className="text-sm text-gray-500 mt-1">{setting.deskripsiAplikasi}</p>
+                        </div>
+                        
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            {error && (
+                                <div className="bg-red-50 border border-red-200 text-red-600 p-3 rounded-lg text-sm flex items-center gap-2">
+                                    <Icons.X /> {error}
+                                </div>
+                            )}
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Username</label>
+                                <input type="text" value={username} onChange={e => setUsername(e.target.value)} 
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                                    placeholder="Masukkan username" required />
+                            </div>
+                            
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">Password</label>
+                                <input type="password" value={password} onChange={e => setPassword(e.target.value)} 
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
+                                    placeholder="Masukkan password" required />
+                            </div>
+                            
+                            <button type="submit" className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-3 rounded-lg hover:from-blue-700 hover:to-indigo-700 transition-all font-medium shadow-lg shadow-blue-200">
+                                Masuk
+                            </button>
+                        </form>
+                        
+                        <div className="mt-6 p-4 bg-gray-50 rounded-xl text-sm">
+                            <p className="font-semibold text-gray-700 mb-2">Demo Account:</p>
+                            <div className="space-y-1 text-gray-600">
+                                <p><span className="font-medium">Admin:</span> admin / admin123</p>
+                                <p><span className="font-medium">Guru:</span> guru / guru123</p>
+                            </div>
+                        </div>
+                        
+                        <div className="mt-4 text-center text-xs text-gray-500">
+                            <p>TA {setting.tahunAjaranDefault} • Semester {setting.semesterDefault}</p>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ==========================================
+        // ADMIN DASHBOARD
+        // ==========================================
+        function AdminDashboard({ onLogout }) {
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const [refresh, setRefresh] = useState(0);
+            const setting = DB.getSetting();
+            const refreshData = () => setRefresh(r => r + 1);
+
+            const menuItems = [
+                { id: 'dashboard', label: 'Dashboard', icon: <Icons.Chart /> },
+                { id: 'guru', label: 'Manajemen Guru', icon: <Icons.User /> },
+                { id: 'kelas', label: 'Manajemen Kelas', icon: <Icons.School /> },
+                { id: 'siswa', label: 'Input Siswa', icon: <Icons.Users /> },
+                { id: 'mapel', label: 'Mata Pelajaran', icon: <Icons.Book /> },
+                { id: 'jadwal', label: 'Jadwal Mengajar', icon: <Icons.Calendar /> },
+                { id: 'jam', label: 'Jam Pelajaran', icon: <Icons.Clock /> },
+                { id: 'absensi', label: 'Rekap Absensi', icon: <Icons.FileText /> },
+                { id: 'profil', label: 'Profil Admin', icon: <Icons.Settings /> },
+            ];
+
+            const renderContent = () => {
+                switch(activeTab) {
+                    case 'dashboard': return <DashboardContent key={refresh} />;
+                    case 'guru': return <GuruContent key={refresh} onRefresh={refreshData} />;
+                    case 'kelas': return <KelasContent key={refresh} onRefresh={refreshData} />;
+                    case 'siswa': return <SiswaContent key={refresh} onRefresh={refreshData} />;
+                    case 'mapel': return <MapelContent key={refresh} onRefresh={refreshData} />;
+                    case 'jadwal': return <JadwalContent key={refresh} onRefresh={refreshData} />;
+                    case 'jam': return <JamContent key={refresh} onRefresh={refreshData} />;
+                    case 'absensi': return <AbsensiContent key={refresh} />;
+                    case 'profil': return <ProfilAdminContent key={refresh} />;
+                    default: return <DashboardContent />;
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-100">
+                    <header className="bg-slate-900 text-white sticky top-0 z-50">
+                        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+                                    <Icons.Book />
+                                </div>
+                                <div>
+                                    <h1 className="text-lg font-bold">E-Jurnal & Absensi</h1>
+                                    <p className="text-xs text-slate-400">{setting.namaSekolah}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <span className="text-sm hidden sm:inline">Administrator</span>
+                                <button onClick={onLogout} className="flex items-center gap-2 text-sm bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg transition-colors">
+                                    <Icons.Logout /> <span className="hidden sm:inline">Keluar</span>
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+
+                    <div className="max-w-7xl mx-auto px-4 py-6 flex flex-col lg:flex-row gap-6">
+                        <nav className="w-full lg:w-64 flex-shrink-0">
+                            <div className="bg-white rounded-xl shadow-sm p-2 space-y-1 sticky top-24">
+                                {menuItems.map(item => (
+                                    <button 
+                                        key={item.id} 
+                                        onClick={() => setActiveTab(item.id)}
+                                        className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${
+                                            activeTab === item.id 
+                                                ? 'bg-blue-600 text-white shadow-md' 
+                                                : 'hover:bg-gray-100 text-gray-700'
+                                        }`}
+                                    >
+                                        {item.icon}
+                                        <span className="font-medium">{item.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </nav>
+
+                        <main className="flex-1 bg-white rounded-xl shadow-sm p-6 min-h-[600px]">
+                            {renderContent()}
+                        </main>
+                    </div>
+                </div>
+            );
+        }
+
+        // ==========================================
+        // DASHBOARD CONTENT
+        // ==========================================
+        function DashboardContent() {
+            const setting = DB.getSetting();
+            const guru = DB.getGuru();
+            const kelas = DB.getKelas();
+            const siswa = DB.getSiswa();
+            const mapel = DB.getMapel();
+            const jadwal = DB.getJadwal();
+            const absensi = DB.getAbsensi();
+            
+            const today = new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+            const absensiHariIni = absensi.filter(a => a.tanggal === new Date().toISOString().split('T')[0]).length;
+
+            const stats = [
+                { title: 'Total Guru', value: guru.length, color: 'from-blue-500 to-blue-600', icon: <Icons.User /> },
+                { title: 'Total Kelas', value: kelas.length, color: 'from-emerald-500 to-emerald-600', icon: <Icons.School /> },
+                { title: 'Total Siswa', value: siswa.length, color: 'from-violet-500 to-violet-600', icon: <Icons.Users /> },
+                { title: 'Mata Pelajaran', value: mapel.length, color: 'from-amber-500 to-amber-600', icon: <Icons.Book /> },
+                { title: 'Total Jadwal', value: jadwal.length, color: 'from-rose-500 to-rose-600', icon: <Icons.Calendar /> },
+                { title: 'Absensi Hari Ini', value: absensiHariIni, color: 'from-cyan-500 to-cyan-600', icon: <Icons.FileText /> },
+            ];
+
+            return (
+                <div className="space-y-6 fade-in">
+                    <div>
+                        <h2 className="text-2xl font-bold text-gray-900">Dashboard Admin</h2>
+                        <p className="text-gray-600">{today}</p>
+                    </div>
+
+                    <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-xl p-6 shadow-lg">
+                        <div className="flex items-center gap-4">
+                            {setting.logoSekolah ? (
+                                <img src={setting.logoSekolah} alt="Logo" className="w-16 h-16 rounded-lg bg-white/20" />
+                            ) : (
+                                <div className="w-16 h-16 bg-white/20 rounded-lg flex items-center justify-center text-white">
+                                    <Icons.School />
+                                </div>
+                            )}
+                            <div>
+                                <h3 className="text-xl font-semibold">{setting.namaSekolah}</h3>
+                                <p className="text-blue-100">{setting.deskripsiAplikasi}</p>
+                                <p className="text-sm text-blue-200 mt-1">{setting.alamatSekolah}</p>
+                                <p className="text-sm text-blue-200">TA {setting.tahunAjaranDefault} • Semester {setting.semesterDefault}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                        {stats.map((stat, i) => (
+                            <div key={i} className={`bg-gradient-to-br ${stat.color} text-white rounded-xl p-4 shadow-md`}>
+                                <div className="opacity-80 mb-2">{stat.icon}</div>
+                                <p className="text-2xl font-bold">{stat.value}</p>
+                                <p className="text-sm opacity-90">{stat.title}</p>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <div className="border rounded-xl p-4">
+                            <h3 className="font-semibold mb-4 flex items-center gap-2">
+                                <Icons.User /> Guru Terbaru
+                            </h3>
+                            <div className="space-y-3">
+                                {guru.slice(-5).reverse().map(g => (
+                                    <div key={g.id} className="flex items-center gap-3 p-2 bg-gray-50 rounded-lg">
+                                        <div className="w-10 h-10 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center font-medium">
+                                            {g.nama.charAt(0)}
+                                        </div>
+                                        <div className="flex-1">
+                                            <p className="font-medium">{g.nama}</p>
+                                            <p className="text-sm text-gray-600">{g.nip}</p>
+                                        </div>
+                                        <span className={`px-2 py-1 rounded text-xs ${g.status === 'aktif' ? 'bg-green-100 text-green-800' : 'bg-gray-100'}`}>
+                                            {g.status}
+                                        </span>
+                                    </div>
+                                ))}
+                                {guru.length === 0 && <p className="text-gray-500 text-center py-4">Belum ada data guru</p>}
+                            </div>
+                        </div>
+
+                        <div className="border rounded-xl p-4">
+                            <h3 className="font-semibold mb-4 flex items-center gap-2">
+                                <Icons.School /> Daftar Kelas
+                            </h3>
+                            <div className="grid grid-cols-2 gap-3">
+                                {kelas.slice(0, 6).map(k => (
+                                    <div key={k.id} className="p-3 border rounded-lg hover:shadow-md transition-shadow">
+                                        <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs">Kelas {k.tingkat}</span>
+                                        <p className="font-medium mt-1">{k.nama}</p>
+                                        <p className="text-sm text-gray-600">{k.jumlahSiswa || 0} siswa</p>
+                                        {k.waliKelasId && (
+                                            <p className="text-xs text-gray-500">Wali: {DB.getGuruById(k.waliKelasId)?.nama}</p>
+                                        )}
+                                    </div>
+                                ))}
+                                {kelas.length === 0 && <p className="text-gray-500 text-center py-4 col-span-2">Belum ada data kelas</p>}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="border rounded-xl p-4">
+                        <h3 className="font-semibold mb-4 flex items-center gap-2">
+                            <Icons.Book /> Mata Pelajaran
+                        </h3>
+                        <div className="flex flex-wrap gap-2">
+                            {mapel.map(m => (
+                                <span key={m.id} className="bg-amber-100 text-amber-800 px-3 py-1.5 rounded-lg text-sm font-medium">
+                                    {m.kode} - {m.nama}
+                                </span>
+                            ))}
+                            {mapel.length === 0 && <p className="text-gray-500">Belum ada data mata pelajaran</p>}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+
+        // ==========================================
+        // GURU CONTENT
+        // ==========================================
+        function GuruContent({ onRefresh }) {
+            const [guru, setGuru] = useState(DB.getGuru());
+            const [search, setSearch] = useState('');
+            const [editing, setEditing] = useState(null);
+            const [showForm, setShowForm] = useState(false);
+            const [formData, setFormData] = useState({
+                nip: '', nama: '', email: '', noTelepon: '', alamat: '',
+                jenisKelamin: 'L', tanggalLahir: '', pendidikan: '', status: 'aktif'
+            });
+
+            const filtered = guru.filter(g => 
+                g.nama.toLowerCase().includes(search.toLowerCase()) ||
+                g.nip.includes(search)
+            );
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (editing) {
+                    const updated = { ...editing, ...formData };
+                    DB.saveGuru(updated);
+                    const user = DB.getUserById(editing.userId);
+                    if (user) {
+                        user.nama = formData.nama;
+                        user.email = formData.email;
+                        DB.saveUser(user);
+                    }
+                } else {
+                    const userId = 'user-' + Date.now();
+                    DB.saveUser({
+                        id: userId,
+                        username: formData.nip,
+                        password: formData.nip,
+                        role: 'guru',
+                        nama: formData.nama,
+                        email: formData.email,
+                        createdAt: new Date().toISOString()
+                    });
+                    DB.saveGuru({
+                        id: 'guru-' + Date.now(),
+                        userId: userId,
+                        ...formData,
+                        createdAt: new Date().toISOString()
+                    });
+                }
+                setGuru(DB.getGuru());
+                setShowForm(false);
+                setEditing(null);
+                setFormData({ nip: '', nama: '', email: '', noTelepon: '', alamat: '', jenisKelamin: 'L', tanggalLahir: '', pendidikan: '', status: 'aktif' });
+                onRefresh();
+            };
+
+            const handleEdit = (g) => {
+                setEditing(g);
+                setFormData({
+                    nip: g.nip, nama: g.nama, email: g.email, noTelepon: g.noTelepon || '',
+                    alamat: g.alamat || '', jenisKelamin: g.jenisKelamin || 'L',
+                    tanggalLahir: g.tanggalLahir || '', pendidikan: g.pendidikan || '', status: g.status
+                });
+                setShowForm(true);
+            };
+
+            const handleDelete = (id) => {
+                if (confirm('Yakin hapus guru?')) {
+                    DB.deleteGuru(id);
+                    setGuru(DB.getGuru());
+                    onRefresh();
+                }
+            };
+
+            return (
+                <div className="fade-in">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                        <h2 className="text-xl font-bold">Manajemen Guru</h2>
+                        <button onClick={() => setShowForm(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700">
+                            <Icons.Plus /> Tambah Guru
+                        </button>
+                    </div>
+
+                    <div className="mb-4">
+                        <input 
+                            type="text" 
+                            placeholder="Cari guru..." 
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">NIP</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Nama</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Email</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Status</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {filtered.map(g => (
+                                    <tr key={g.id} className="hover:bg-gray-50">
+                                        <td className="px-4 py-3">{g.nip}</td>
+                                        <td className="px-4 py-3 font-medium">{g.nama}</td>
+                                        <td className="px-4 py-3 text-sm">{g.email}</td>
+                                        <td className="px-4 py-3">
+                                            <span className={`px-2 py-1 rounded text-xs ${g.status === 'aktif' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
+                                                {g.status}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            <div className="flex gap-2">
+                                                <button onClick={() => handleEdit(g)} className="p-2 text-blue-600 hover:bg-blue-50 rounded"><Icons.Edit /></button>
+                                                <button onClick={() => handleDelete(g.id)} className="p-2 text-red-600 hover:bg-red-50 rounded"><Icons.Trash /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        {filtered.length === 0 && <p className="text-center py-8 text-gray-500">Tidak ada data guru</p>}
+                    </div>
+
+                    <Modal isOpen={showForm} onClose={() => { setShowForm(false); setEditing(null); }} title={editing ? 'Edit Guru' : 'Tambah Guru'}>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">NIP *</label>
+                                    <input type="text" required value={formData.nip} onChange={e => setFormData({...formData, nip: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Nama Lengkap *</label>
+                                    <input type="text" required value={formData.nama} onChange={e => setFormData({...formData, nama: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Email *</label>
+                                    <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">No. Telepon</label>
+                                    <input type="text" value={formData.noTelepon} onChange={e => setFormData({...formData, noTelepon: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Jenis Kelamin</label>
+                                    <select value={formData.jenisKelamin} onChange={e => setFormData({...formData, jenisKelamin: e.target.value})} className="w-full px-3 py-2 border rounded-lg">
+                                        <option value="L">Laki-laki</option>
+                                        <option value="P">Perempuan</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Tanggal Lahir</label>
+                                    <input type="date" value={formData.tanggalLahir} onChange={e => setFormData({...formData, tanggalLahir: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Pendidikan</label>
+                                    <input type="text" value={formData.pendidikan} onChange={e => setFormData({...formData, pendidikan: e.target.value})} className="w-full px-3 py-2 border rounded-lg" placeholder="S1 Pendidikan..." />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Status</label>
+                                    <select value={formData.status} onChange={e => setFormData({...formData, status: e.target.value})} className="w-full px-3 py-2 border rounded-lg">
+                                        <option value="aktif">Aktif</option>
+                                        <option value="nonaktif">Non-Aktif</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Alamat</label>
+                                <textarea value={formData.alamat} onChange={e => setFormData({...formData, alamat: e.target.value})} className="w-full px-3 py-2 border rounded-lg" rows="2"></textarea>
+                            </div>
+                            <div className="flex justify-end gap-2 pt-4">
+                                <button type="button" onClick={() => { setShowForm(false); setEditing(null); }} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Batal</button>
+                                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">{editing ? 'Simpan' : 'Tambah'}</button>
+                            </div>
+                        </form>
+                    </Modal>
+                </div>
+            );
+        }
+
+        // ==========================================
+        // KELAS CONTENT
+        // ==========================================
+        function KelasContent({ onRefresh }) {
+            const [kelas, setKelas] = useState(DB.getKelas());
+            const [guru] = useState(DB.getGuru());
+            const [search, setSearch] = useState('');
+            const [editing, setEditing] = useState(null);
+            const [showForm, setShowForm] = useState(false);
+            const [formData, setFormData] = useState({ nama: '', tingkat: 'X', jurusan: '', waliKelasId: '' });
+
+            const filtered = kelas.filter(k => k.nama.toLowerCase().includes(search.toLowerCase()));
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (editing) {
+                    DB.saveKelas({ ...editing, ...formData });
+                } else {
+                    DB.saveKelas({
+                        id: 'kelas-' + Date.now(),
+                        ...formData,
+                        jumlahSiswa: 0,
+                        createdAt: new Date().toISOString()
+                    });
+                }
+                setKelas(DB.getKelas());
+                setShowForm(false);
+                setEditing(null);
+                setFormData({ nama: '', tingkat: 'X', jurusan: '', waliKelasId: '' });
+                onRefresh();
+            };
+
+            const handleEdit = (k) => {
+                setEditing(k);
+                setFormData({ nama: k.nama, tingkat: k.tingkat, jurusan: k.jurusan || '', waliKelasId: k.waliKelasId || '' });
+                setShowForm(true);
+            };
+
+            const handleDelete = (id) => {
+                if (confirm('Yakin hapus kelas?')) {
+                    DB.deleteKelas(id);
+                    setKelas(DB.getKelas());
+                    onRefresh();
+                }
+            };
+
+            return (
+                <div className="fade-in">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                        <h2 className="text-xl font-bold">Manajemen Kelas</h2>
+                        <button onClick={() => setShowForm(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700">
+                            <Icons.Plus /> Tambah Kelas
+                        </button>
+                    </div>
+
+                    <div className="mb-4">
+                        <input 
+                            type="text" 
+                            placeholder="Cari kelas..." 
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {filtered.map(k => (
+                            <div key={k.id} className="border rounded-xl p-4 hover:shadow-md transition-shadow">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <span className="bg-blue-100 text-blue-800 px-2 py-0.5 rounded text-xs">Kelas {k.tingkat}</span>
+                                        <h3 className="font-semibold text-lg mt-1">{k.nama}</h3>
+                                        {k.jurusan && <p className="text-sm text-gray-600">{k.jurusan}</p>}
+                                        <p className="text-sm text-gray-600 mt-1">{k.jumlahSiswa || 0} siswa</p>
+                                        {k.waliKelasId && (
+                                            <p className="text-xs text-gray-500">Wali: {DB.getGuruById(k.waliKelasId)?.nama}</p>
+                                        )}
+                                    </div>
+                                    <div className="flex gap-1">
+                                        <button onClick={() => handleEdit(k)} className="p-2 text-blue-600 hover:bg-blue-50 rounded"><Icons.Edit /></button>
+                                        <button onClick={() => handleDelete(k.id)} className="p-2 text-red-600 hover:bg-red-50 rounded"><Icons.Trash /></button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    {filtered.length === 0 && <p className="text-center py-8 text-gray-500">Tidak ada data kelas</p>}
+
+                    <Modal isOpen={showForm} onClose={() => { setShowForm(false); setEditing(null); }} title={editing ? 'Edit Kelas' : 'Tambah Kelas'}>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Tingkat *</label>
+                                    <select required value={formData.tingkat} onChange={e => setFormData({...formData, tingkat: e.target.value})} className="w-full px-3 py-2 border rounded-lg">
+                                        <option value="X">X</option>
+                                        <option value="XI">XI</option>
+                                        <option value="XII">XII</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Nama Kelas *</label>
+                                    <input type="text" required value={formData.nama} onChange={e => setFormData({...formData, nama: e.target.value})} className="w-full px-3 py-2 border rounded-lg" placeholder="TKJ 1" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Jurusan</label>
+                                <input type="text" value={formData.jurusan} onChange={e => setFormData({...formData, jurusan: e.target.value})} className="w-full px-3 py-2 border rounded-lg" placeholder="Teknik Komputer dan Jaringan" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Wali Kelas</label>
+                                <select value={formData.waliKelasId} onChange={e => setFormData({...formData, waliKelasId: e.target.value})} className="w-full px-3 py-2 border rounded-lg">
+                                    <option value="">-- Pilih Wali Kelas --</option>
+                                    {guru.map(g => <option key={g.id} value={g.id}>{g.nama}</option>)}
+                                </select>
+                            </div>
+                            <div className="flex justify-end gap-2 pt-4">
+                                <button type="button" onClick={() => { setShowForm(false); setEditing(null); }} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Batal</button>
+                                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">{editing ? 'Simpan' : 'Tambah'}</button>
+                            </div>
+                        </form>
+                    </Modal>
+                </div>
+            );
+        }
+
+
+        // ==========================================
+        // SISWA CONTENT
+        // ==========================================
+        function SiswaContent({ onRefresh }) {
+            const [siswa, setSiswa] = useState(DB.getSiswa());
+            const [kelas] = useState(DB.getKelas());
+            const [search, setSearch] = useState('');
+            const [filterKelas, setFilterKelas] = useState('');
+            const [editing, setEditing] = useState(null);
+            const [showForm, setShowForm] = useState(false);
+            const [showImport, setShowImport] = useState(false);
+            const [importData, setImportData] = useState('');
+            const [formData, setFormData] = useState({
+                nis: '', nama: '', kelasId: '', jenisKelamin: 'L', tempatLahir: '', tanggalLahir: '', alamat: '', namaOrtu: '', noTelepon: ''
+            });
+
+            const filtered = siswa.filter(s => {
+                const matchSearch = s.nama.toLowerCase().includes(search.toLowerCase()) || s.nis.includes(search);
+                const matchKelas = filterKelas ? s.kelasId === filterKelas : true;
+                return matchSearch && matchKelas;
+            });
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (editing) {
+                    DB.saveSiswa({ ...editing, ...formData });
+                } else {
+                    DB.saveSiswa({
+                        id: 'siswa-' + Date.now(),
+                        ...formData,
+                        createdAt: new Date().toISOString()
+                    });
+                }
+                updateKelasCount();
+                setSiswa(DB.getSiswa());
+                setShowForm(false);
+                setEditing(null);
+                setFormData({ nis: '', nama: '', kelasId: '', jenisKelamin: 'L', tempatLahir: '', tanggalLahir: '', alamat: '', namaOrtu: '', noTelepon: '' });
+                onRefresh();
+            };
+
+            const updateKelasCount = () => {
+                kelas.forEach(k => {
+                    const count = DB.getSiswaByKelas(k.id).length;
+                    DB.saveKelas({ ...k, jumlahSiswa: count });
+                });
+            };
+
+            const handleEdit = (s) => {
+                setEditing(s);
+                setFormData({
+                    nis: s.nis, nama: s.nama, kelasId: s.kelasId, jenisKelamin: s.jenisKelamin || 'L',
+                    tempatLahir: s.tempatLahir || '', tanggalLahir: s.tanggalLahir || '',
+                    alamat: s.alamat || '', namaOrtu: s.namaOrtu || '', noTelepon: s.noTelepon || ''
+                });
+                setShowForm(true);
+            };
+
+            const handleDelete = (id) => {
+                if (confirm('Yakin hapus siswa?')) {
+                    DB.deleteSiswa(id);
+                    updateKelasCount();
+                    setSiswa(DB.getSiswa());
+                    onRefresh();
+                }
+            };
+
+            const handleExport = () => {
+                const data = siswa.map(s => ({
+                    NIS: s.nis,
+                    Nama: s.nama,
+                    Kelas: DB.getKelasById(s.kelasId)?.nama || '',
+                    'Jenis Kelamin': s.jenisKelamin === 'L' ? 'Laki-laki' : 'Perempuan',
+                    'Tempat Lahir': s.tempatLahir || '',
+                    'Tanggal Lahir': s.tanggalLahir || '',
+                    Alamat: s.alamat || '',
+                    'Nama Ortu': s.namaOrtu || '',
+                    'No Telepon': s.noTelepon || ''
+                }));
+                const csv = convertToCSV(data);
+                downloadFile(csv, 'data-siswa.csv', 'text/csv');
+            };
+
+            const handleImport = () => {
+                try {
+                    const lines = importData.trim().split('\n');
+                    const headers = lines[0].split(',').map(h => h.trim());
+                    
+                    for (let i = 1; i < lines.length; i++) {
+                        const values = lines[i].split(',').map(v => v.trim());
+                        const row = {};
+                        headers.forEach((h, idx) => row[h] = values[idx]);
+                        
+                        const kelasId = kelas.find(k => k.nama === row['Kelas'])?.id || '';
+                        
+                        DB.saveSiswa({
+                            id: 'siswa-' + Date.now() + '-' + i,
+                            nis: row['NIS'] || row['nis'],
+                            nama: row['Nama'] || row['nama'],
+                            kelasId: kelasId,
+                            jenisKelamin: row['Jenis Kelamin'] === 'Perempuan' ? 'P' : 'L',
+                            tempatLahir: row['Tempat Lahir'] || '',
+                            tanggalLahir: row['Tanggal Lahir'] || '',
+                            alamat: row['Alamat'] || '',
+                            namaOrtu: row['Nama Ortu'] || '',
+                            noTelepon: row['No Telepon'] || '',
+                            createdAt: new Date().toISOString()
+                        });
+                    }
+                    updateKelasCount();
+                    setSiswa(DB.getSiswa());
+                    setShowImport(false);
+                    setImportData('');
+                    onRefresh();
+                    alert('Import berhasil!');
+                } catch (e) {
+                    alert('Format CSV tidak valid');
+                }
+            };
+
+            const convertToCSV = (data) => {
+                if (data.length === 0) return '';
+                const headers = Object.keys(data[0]);
+                const rows = data.map(row => headers.map(h => '"' + (row[h] || '') + '"').join(','));
+                return [headers.join(','), ...rows].join('\n');
+            };
+
+            const downloadFile = (content, filename, type) => {
+                const blob = new Blob([content], { type });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+
+            return (
+                <div className="fade-in">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                        <h2 className="text-xl font-bold">Data Siswa</h2>
+                        <div className="flex gap-2">
+                            <button onClick={() => setShowImport(true)} className="bg-emerald-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-emerald-700">
+                                <Icons.Upload /> Import
+                            </button>
+                            <button onClick={handleExport} className="bg-amber-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-amber-700">
+                                <Icons.Download /> Export
+                            </button>
+                            <button onClick={() => setShowForm(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700">
+                                <Icons.Plus /> Tambah
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-4 mb-4">
+                        <input 
+                            type="text" 
+                            placeholder="Cari siswa..." 
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            className="flex-1 px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                        <select value={filterKelas} onChange={e => setFilterKelas(e.target.value)} className="px-4 py-2 border rounded-lg">
+                            <option value="">Semua Kelas</option>
+                            {kelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                        </select>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">NIS</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Nama</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Kelas</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">JK</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {filtered.map(s => (
+                                    <tr key={s.id} className="hover:bg-gray-50">
+                                        <td className="px-4 py-3">{s.nis}</td>
+                                        <td className="px-4 py-3 font-medium">{s.nama}</td>
+                                        <td className="px-4 py-3">{DB.getKelasById(s.kelasId)?.nama || '-'}</td>
+                                        <td className="px-4 py-3">{s.jenisKelamin}</td>
+                                        <td className="px-4 py-3">
+                                            <div className="flex gap-2">
+                                                <button onClick={() => handleEdit(s)} className="p-2 text-blue-600 hover:bg-blue-50 rounded"><Icons.Edit /></button>
+                                                <button onClick={() => handleDelete(s.id)} className="p-2 text-red-600 hover:bg-red-50 rounded"><Icons.Trash /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        {filtered.length === 0 && <p className="text-center py-8 text-gray-500">Tidak ada data siswa</p>}
+                    </div>
+
+                    <Modal isOpen={showForm} onClose={() => { setShowForm(false); setEditing(null); }} title={editing ? 'Edit Siswa' : 'Tambah Siswa'}>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">NIS *</label>
+                                    <input type="text" required value={formData.nis} onChange={e => setFormData({...formData, nis: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Nama Lengkap *</label>
+                                    <input type="text" required value={formData.nama} onChange={e => setFormData({...formData, nama: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Kelas *</label>
+                                    <select required value={formData.kelasId} onChange={e => setFormData({...formData, kelasId: e.target.value})} className="w-full px-3 py-2 border rounded-lg">
+                                        <option value="">-- Pilih Kelas --</option>
+                                        {kelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Jenis Kelamin</label>
+                                    <select value={formData.jenisKelamin} onChange={e => setFormData({...formData, jenisKelamin: e.target.value})} className="w-full px-3 py-2 border rounded-lg">
+                                        <option value="L">Laki-laki</option>
+                                        <option value="P">Perempuan</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Tempat Lahir</label>
+                                    <input type="text" value={formData.tempatLahir} onChange={e => setFormData({...formData, tempatLahir: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Tanggal Lahir</label>
+                                    <input type="date" value={formData.tanggalLahir} onChange={e => setFormData({...formData, tanggalLahir: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Nama Orang Tua</label>
+                                    <input type="text" value={formData.namaOrtu} onChange={e => setFormData({...formData, namaOrtu: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">No. Telepon</label>
+                                    <input type="text" value={formData.noTelepon} onChange={e => setFormData({...formData, noTelepon: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Alamat</label>
+                                <textarea value={formData.alamat} onChange={e => setFormData({...formData, alamat: e.target.value})} className="w-full px-3 py-2 border rounded-lg" rows="2"></textarea>
+                            </div>
+                            <div className="flex justify-end gap-2 pt-4">
+                                <button type="button" onClick={() => { setShowForm(false); setEditing(null); }} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Batal</button>
+                                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">{editing ? 'Simpan' : 'Tambah'}</button>
+                            </div>
+                        </form>
+                    </Modal>
+
+                    <Modal isOpen={showImport} onClose={() => setShowImport(false)} title="Import Data Siswa">
+                        <div className="space-y-4">
+                            <p className="text-sm text-gray-600">Format CSV: NIS, Nama, Kelas, Jenis Kelamin, Tempat Lahir, Tanggal Lahir, Alamat, Nama Ortu, No Telepon</p>
+                            <textarea 
+                                value={importData} 
+                                onChange={e => setImportData(e.target.value)}
+                                className="w-full px-3 py-2 border rounded-lg font-mono text-sm"
+                                rows="10"
+                                placeholder="NIS,Nama,Kelas,Jenis Kelamin&#10;12345,Budi,TKJ 1,Laki-laki"
+                            ></textarea>
+                            <div className="flex justify-end gap-2">
+                                <button onClick={() => setShowImport(false)} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Batal</button>
+                                <button onClick={handleImport} className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700">Import</button>
+                            </div>
+                        </div>
+                    </Modal>
+                </div>
+            );
+        }
+
+
+        // ==========================================
+        // MAPEL CONTENT
+        // ==========================================
+        function MapelContent({ onRefresh }) {
+            const [mapel, setMapel] = useState(DB.getMapel());
+            const [search, setSearch] = useState('');
+            const [editing, setEditing] = useState(null);
+            const [showForm, setShowForm] = useState(false);
+            const [formData, setFormData] = useState({ kode: '', nama: '', kategori: 'umum' });
+
+            const filtered = mapel.filter(m => m.nama.toLowerCase().includes(search.toLowerCase()) || m.kode.toLowerCase().includes(search.toLowerCase()));
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (editing) {
+                    DB.saveMapel({ ...editing, ...formData });
+                } else {
+                    DB.saveMapel({
+                        id: 'mapel-' + Date.now(),
+                        ...formData,
+                        createdAt: new Date().toISOString()
+                    });
+                }
+                setMapel(DB.getMapel());
+                setShowForm(false);
+                setEditing(null);
+                setFormData({ kode: '', nama: '', kategori: 'umum' });
+                onRefresh();
+            };
+
+            const handleEdit = (m) => {
+                setEditing(m);
+                setFormData({ kode: m.kode, nama: m.nama, kategori: m.kategori || 'umum' });
+                setShowForm(true);
+            };
+
+            const handleDelete = (id) => {
+                if (confirm('Yakin hapus mata pelajaran?')) {
+                    DB.deleteMapel(id);
+                    setMapel(DB.getMapel());
+                    onRefresh();
+                }
+            };
+
+            return (
+                <div className="fade-in">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                        <h2 className="text-xl font-bold">Mata Pelajaran</h2>
+                        <button onClick={() => setShowForm(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700">
+                            <Icons.Plus /> Tambah Mapel
+                        </button>
+                    </div>
+
+                    <div className="mb-4">
+                        <input 
+                            type="text" 
+                            placeholder="Cari mata pelajaran..." 
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                            className="w-full px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {filtered.map(m => (
+                            <div key={m.id} className="border rounded-xl p-4 hover:shadow-md transition-shadow">
+                                <div className="flex justify-between items-start">
+                                    <div>
+                                        <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded text-xs">{m.kode}</span>
+                                        <h3 className="font-semibold mt-1">{m.nama}</h3>
+                                        <p className="text-sm text-gray-600 capitalize">{m.kategori}</p>
+                                    </div>
+                                    <div className="flex gap-1">
+                                        <button onClick={() => handleEdit(m)} className="p-2 text-blue-600 hover:bg-blue-50 rounded"><Icons.Edit /></button>
+                                        <button onClick={() => handleDelete(m.id)} className="p-2 text-red-600 hover:bg-red-50 rounded"><Icons.Trash /></button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                    {filtered.length === 0 && <p className="text-center py-8 text-gray-500">Tidak ada data mata pelajaran</p>}
+
+                    <Modal isOpen={showForm} onClose={() => { setShowForm(false); setEditing(null); }} title={editing ? 'Edit Mapel' : 'Tambah Mapel'}>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Kode Mapel *</label>
+                                <input type="text" required value={formData.kode} onChange={e => setFormData({...formData, kode: e.target.value})} className="w-full px-3 py-2 border rounded-lg" placeholder="MTK" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Nama Mapel *</label>
+                                <input type="text" required value={formData.nama} onChange={e => setFormData({...formData, nama: e.target.value})} className="w-full px-3 py-2 border rounded-lg" placeholder="Matematika" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Kategori</label>
+                                <select value={formData.kategori} onChange={e => setFormData({...formData, kategori: e.target.value})} className="w-full px-3 py-2 border rounded-lg">
+                                    <option value="umum">Umum</option>
+                                    <option value="kejuruan">Kejuruan</option>
+                                    <option value="muatan_lokal">Muatan Lokal</option>
+                                </select>
+                            </div>
+                            <div className="flex justify-end gap-2 pt-4">
+                                <button type="button" onClick={() => { setShowForm(false); setEditing(null); }} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Batal</button>
+                                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">{editing ? 'Simpan' : 'Tambah'}</button>
+                            </div>
+                        </form>
+                    </Modal>
+                </div>
+            );
+        }
+
+        // ==========================================
+        // JADWAL CONTENT
+        // ==========================================
+        function JadwalContent({ onRefresh }) {
+            const [jadwal, setJadwal] = useState(DB.getJadwal());
+            const [guru] = useState(DB.getGuru());
+            const [kelas] = useState(DB.getKelas());
+            const [mapel] = useState(DB.getMapel());
+            const [jamPelajaran] = useState(DB.getJamPelajaran());
+            const [filterHari, setFilterHari] = useState('Senin');
+            const [editing, setEditing] = useState(null);
+            const [showForm, setShowForm] = useState(false);
+            const [formData, setFormData] = useState({
+                hari: 'Senin', guruId: '', kelasId: '', mapelId: '', jamKe: '', ruangan: ''
+            });
+
+            const hariList = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu'];
+            const filtered = jadwal.filter(j => j.hari === filterHari);
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (editing) {
+                    DB.saveJadwal({ ...editing, ...formData });
+                } else {
+                    DB.saveJadwal({
+                        id: 'jadwal-' + Date.now(),
+                        ...formData,
+                        createdAt: new Date().toISOString()
+                    });
+                }
+                setJadwal(DB.getJadwal());
+                setShowForm(false);
+                setEditing(null);
+                setFormData({ hari: 'Senin', guruId: '', kelasId: '', mapelId: '', jamKe: '', ruangan: '' });
+                onRefresh();
+            };
+
+            const handleEdit = (j) => {
+                setEditing(j);
+                setFormData({
+                    hari: j.hari, guruId: j.guruId, kelasId: j.kelasId,
+                    mapelId: j.mapelId, jamKe: j.jamKe, ruangan: j.ruangan || ''
+                });
+                setShowForm(true);
+            };
+
+            const handleDelete = (id) => {
+                if (confirm('Yakin hapus jadwal?')) {
+                    DB.deleteJadwal(id);
+                    setJadwal(DB.getJadwal());
+                    onRefresh();
+                }
+            };
+
+            return (
+                <div className="fade-in">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                        <h2 className="text-xl font-bold">Jadwal Mengajar</h2>
+                        <button onClick={() => setShowForm(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700">
+                            <Icons.Plus /> Tambah Jadwal
+                        </button>
+                    </div>
+
+                    <div className="flex gap-2 mb-4 overflow-x-auto pb-2">
+                        {hariList.map(h => (
+                            <button
+                                key={h}
+                                onClick={() => setFilterHari(h)}
+                                className={`px-4 py-2 rounded-lg whitespace-nowrap ${filterHari === h ? 'bg-blue-600 text-white' : 'bg-gray-100 hover:bg-gray-200'}`}
+                            >
+                                {h}
+                            </button>
+                        ))}
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Jam Ke</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Guru</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Mapel</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Kelas</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Ruangan</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {filtered.sort((a, b) => parseInt(a.jamKe) - parseInt(b.jamKe)).map(j => (
+                                    <tr key={j.id} className="hover:bg-gray-50">
+                                        <td className="px-4 py-3">{j.jamKe}</td>
+                                        <td className="px-4 py-3 font-medium">{DB.getGuruById(j.guruId)?.nama}</td>
+                                        <td className="px-4 py-3">{DB.getMapelById(j.mapelId)?.nama}</td>
+                                        <td className="px-4 py-3">{DB.getKelasById(j.kelasId)?.nama}</td>
+                                        <td className="px-4 py-3">{j.ruangan || '-'}</td>
+                                        <td className="px-4 py-3">
+                                            <div className="flex gap-2">
+                                                <button onClick={() => handleEdit(j)} className="p-2 text-blue-600 hover:bg-blue-50 rounded"><Icons.Edit /></button>
+                                                <button onClick={() => handleDelete(j.id)} className="p-2 text-red-600 hover:bg-red-50 rounded"><Icons.Trash /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        {filtered.length === 0 && <p className="text-center py-8 text-gray-500">Tidak ada jadwal untuk hari {filterHari}</p>}
+                    </div>
+
+                    <Modal isOpen={showForm} onClose={() => { setShowForm(false); setEditing(null); }} title={editing ? 'Edit Jadwal' : 'Tambah Jadwal'}>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Hari *</label>
+                                    <select required value={formData.hari} onChange={e => setFormData({...formData, hari: e.target.value})} className="w-full px-3 py-2 border rounded-lg">
+                                        {hariList.map(h => <option key={h} value={h}>{h}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Jam Ke *</label>
+                                    <select required value={formData.jamKe} onChange={e => setFormData({...formData, jamKe: e.target.value})} className="w-full px-3 py-2 border rounded-lg">
+                                        <option value="">-- Pilih Jam --</option>
+                                        {jamPelajaran.map(j => <option key={j.id} value={j.jamKe}>Jam {j.jamKe} ({j.jamMulai}-{j.jamSelesai})</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Guru *</label>
+                                    <select required value={formData.guruId} onChange={e => setFormData({...formData, guruId: e.target.value})} className="w-full px-3 py-2 border rounded-lg">
+                                        <option value="">-- Pilih Guru --</option>
+                                        {guru.map(g => <option key={g.id} value={g.id}>{g.nama}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Mata Pelajaran *</label>
+                                    <select required value={formData.mapelId} onChange={e => setFormData({...formData, mapelId: e.target.value})} className="w-full px-3 py-2 border rounded-lg">
+                                        <option value="">-- Pilih Mapel --</option>
+                                        {mapel.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Kelas *</label>
+                                    <select required value={formData.kelasId} onChange={e => setFormData({...formData, kelasId: e.target.value})} className="w-full px-3 py-2 border rounded-lg">
+                                        <option value="">-- Pilih Kelas --</option>
+                                        {kelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Ruangan</label>
+                                    <input type="text" value={formData.ruangan} onChange={e => setFormData({...formData, ruangan: e.target.value})} className="w-full px-3 py-2 border rounded-lg" placeholder="RPL Lab 1" />
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-2 pt-4">
+                                <button type="button" onClick={() => { setShowForm(false); setEditing(null); }} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Batal</button>
+                                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">{editing ? 'Simpan' : 'Tambah'}</button>
+                            </div>
+                        </form>
+                    </Modal>
+                </div>
+            );
+        }
+
+
+        // ==========================================
+        // JAM CONTENT
+        // ==========================================
+        function JamContent({ onRefresh }) {
+            const [jam, setJam] = useState(DB.getJamPelajaran());
+            const [editing, setEditing] = useState(null);
+            const [showForm, setShowForm] = useState(false);
+            const [formData, setFormData] = useState({ jamKe: '', jamMulai: '', jamSelesai: '' });
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (editing) {
+                    DB.saveJamPelajaran({ ...editing, ...formData });
+                } else {
+                    DB.saveJamPelajaran({
+                        id: 'jam-' + Date.now(),
+                        ...formData,
+                        createdAt: new Date().toISOString()
+                    });
+                }
+                setJam(DB.getJamPelajaran());
+                setShowForm(false);
+                setEditing(null);
+                setFormData({ jamKe: '', jamMulai: '', jamSelesai: '' });
+                onRefresh();
+            };
+
+            const handleEdit = (j) => {
+                setEditing(j);
+                setFormData({ jamKe: j.jamKe, jamMulai: j.jamMulai, jamSelesai: j.jamSelesai });
+                setShowForm(true);
+            };
+
+            const handleDelete = (id) => {
+                if (confirm('Yakin hapus jam pelajaran?')) {
+                    DB.deleteJamPelajaran(id);
+                    setJam(DB.getJamPelajaran());
+                    onRefresh();
+                }
+            };
+
+            return (
+                <div className="fade-in">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                        <h2 className="text-xl font-bold">Jam Pelajaran</h2>
+                        <button onClick={() => setShowForm(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700">
+                            <Icons.Plus /> Tambah Jam
+                        </button>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Jam Ke</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Jam Mulai</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Jam Selesai</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {jam.map(j => (
+                                    <tr key={j.id} className="hover:bg-gray-50">
+                                        <td className="px-4 py-3 font-medium">{j.jamKe}</td>
+                                        <td className="px-4 py-3">{j.jamMulai}</td>
+                                        <td className="px-4 py-3">{j.jamSelesai}</td>
+                                        <td className="px-4 py-3">
+                                            <div className="flex gap-2">
+                                                <button onClick={() => handleEdit(j)} className="p-2 text-blue-600 hover:bg-blue-50 rounded"><Icons.Edit /></button>
+                                                <button onClick={() => handleDelete(j.id)} className="p-2 text-red-600 hover:bg-red-50 rounded"><Icons.Trash /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        {jam.length === 0 && <p className="text-center py-8 text-gray-500">Tidak ada data jam pelajaran</p>}
+                    </div>
+
+                    <Modal isOpen={showForm} onClose={() => { setShowForm(false); setEditing(null); }} title={editing ? 'Edit Jam' : 'Tambah Jam'}>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Jam Ke *</label>
+                                <input type="number" required value={formData.jamKe} onChange={e => setFormData({...formData, jamKe: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Jam Mulai *</label>
+                                    <input type="time" required value={formData.jamMulai} onChange={e => setFormData({...formData, jamMulai: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Jam Selesai *</label>
+                                    <input type="time" required value={formData.jamSelesai} onChange={e => setFormData({...formData, jamSelesai: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-2 pt-4">
+                                <button type="button" onClick={() => { setShowForm(false); setEditing(null); }} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Batal</button>
+                                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">{editing ? 'Simpan' : 'Tambah'}</button>
+                            </div>
+                        </form>
+                    </Modal>
+                </div>
+            );
+        }
+
+        // ==========================================
+        // ABSENSI CONTENT (ADMIN REKAP)
+        // ==========================================
+        function AbsensiContent() {
+            const [absensi, setAbsensi] = useState(DB.getAbsensi());
+            const [guru] = useState(DB.getGuru());
+            const [filterTanggal, setFilterTanggal] = useState(new Date().toISOString().split('T')[0]);
+            const [filterGuru, setFilterGuru] = useState('');
+
+            const filtered = absensi.filter(a => {
+                const matchTanggal = filterTanggal ? a.tanggal === filterTanggal : true;
+                const matchGuru = filterGuru ? a.guruId === filterGuru : true;
+                return matchTanggal && matchGuru;
+            }).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+            const handleExport = () => {
+                const data = filtered.map(a => ({
+                    Tanggal: a.tanggal,
+                    Guru: DB.getGuruById(a.guruId)?.nama,
+                    Kelas: DB.getKelasById(a.kelasId)?.nama,
+                    Mapel: DB.getMapelById(a.mapelId)?.nama,
+                    'Jam Ke': a.jamKe,
+                    'Materi': a.materi || '-',
+                    'Jumlah Siswa': a.jumlahSiswa || 0,
+                    'Siswa Hadir': a.siswaHadir || 0,
+                    'Siswa Tidak Hadir': a.siswaTidakHadir?.length || a.siswaTidakHadir || 0,
+                    'Keterangan': a.keterangan || '-'
+                }));
+                const csv = convertToCSV(data);
+                downloadFile(csv, 'rekap-absensi-' + filterTanggal + '.csv', 'text/csv');
+            };
+
+            const convertToCSV = (data) => {
+                if (data.length === 0) return '';
+                const headers = Object.keys(data[0]);
+                const rows = data.map(row => headers.map(h => '"' + (row[h] || '') + '"').join(','));
+                return [headers.join(','), ...rows].join('\n');
+            };
+
+            const downloadFile = (content, filename, type) => {
+                const blob = new Blob([content], { type });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+
+            return (
+                <div className="fade-in">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                        <h2 className="text-xl font-bold">Rekap Absensi KBM</h2>
+                        <button onClick={handleExport} className="bg-emerald-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-emerald-700">
+                            <Icons.Download /> Export CSV
+                        </button>
+                    </div>
+
+                    <div className="flex gap-4 mb-4">
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Tanggal</label>
+                            <input 
+                                type="date" 
+                                value={filterTanggal}
+                                onChange={e => setFilterTanggal(e.target.value)}
+                                className="px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Guru</label>
+                            <select value={filterGuru} onChange={e => setFilterGuru(e.target.value)} className="px-4 py-2 border rounded-lg">
+                                <option value="">Semua Guru</option>
+                                {guru.map(g => <option key={g.id} value={g.id}>{g.nama}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Tanggal</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Guru</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Kelas</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Mapel</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Jam</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Materi</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Kehadiran</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {filtered.map(a => (
+                                    <tr key={a.id} className="hover:bg-gray-50">
+                                        <td className="px-4 py-3">{a.tanggal}</td>
+                                        <td className="px-4 py-3 font-medium">{DB.getGuruById(a.guruId)?.nama}</td>
+                                        <td className="px-4 py-3">{DB.getKelasById(a.kelasId)?.nama}</td>
+                                        <td className="px-4 py-3">{DB.getMapelById(a.mapelId)?.nama}</td>
+                                        <td className="px-4 py-3">Jam {a.jamKe}</td>
+                                        <td className="px-4 py-3 max-w-xs truncate">{a.materi || '-'}</td>
+                                        <td className="px-4 py-3">
+                                            <span className="text-green-600">{a.siswaHadir || 0} hadir</span>
+                                            {(a.siswaTidakHadir?.length || a.siswaTidakHadir > 0) && <span className="text-red-600 ml-2">{(a.siswaTidakHadir?.length || a.siswaTidakHadir)} tidak hadir</span>}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        {filtered.length === 0 && <p className="text-center py-8 text-gray-500">Tidak ada data absensi</p>}
+                    </div>
+                </div>
+            );
+        }
+
+        // ==========================================
+        // PROFIL ADMIN CONTENT
+        // ==========================================
+        function ProfilAdminContent() {
+            const [setting, setSetting] = useState(DB.getSetting());
+            const [formData, setFormData] = useState(setting);
+            const [saved, setSaved] = useState(false);
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                DB.saveSetting({ ...formData, updatedAt: new Date().toISOString() });
+                setSetting(DB.getSetting());
+                setSaved(true);
+                setTimeout(() => setSaved(false), 3000);
+            };
+
+            const handleLogoChange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => {
+                        setFormData({ ...formData, logoSekolah: reader.result });
+                    };
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            return (
+                <div className="fade-in">
+                    <h2 className="text-xl font-bold mb-6">Profil Admin & Pengaturan</h2>
+
+                    {saved && (
+                        <div className="bg-green-50 border border-green-200 text-green-700 p-3 rounded-lg mb-4 flex items-center gap-2">
+                            <Icons.Check /> Pengaturan berhasil disimpan
+                        </div>
+                    )}
+
+                    <form onSubmit={handleSubmit} className="space-y-6 max-w-2xl">
+                        <div className="border rounded-xl p-6">
+                            <h3 className="font-semibold mb-4">Informasi Sekolah</h3>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Logo Sekolah</label>
+                                    <div className="flex items-center gap-4">
+                                        {formData.logoSekolah ? (
+                                            <img src={formData.logoSekolah} alt="Logo" className="w-20 h-20 object-contain border rounded-lg" />
+                                        ) : (
+                                            <div className="w-20 h-20 bg-gray-100 rounded-lg flex items-center justify-center">
+                                                <Icons.Image />
+                                            </div>
+                                        )}
+                                        <input type="file" accept="image/*" onChange={handleLogoChange} className="text-sm" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Nama Sekolah *</label>
+                                    <input type="text" required value={formData.namaSekolah} onChange={e => setFormData({...formData, namaSekolah: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Deskripsi Aplikasi</label>
+                                    <input type="text" value={formData.deskripsiAplikasi} onChange={e => setFormData({...formData, deskripsiAplikasi: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Alamat</label>
+                                    <textarea value={formData.alamatSekolah} onChange={e => setFormData({...formData, alamatSekolah: e.target.value})} className="w-full px-3 py-2 border rounded-lg" rows="2"></textarea>
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1">Telepon</label>
+                                        <input type="text" value={formData.teleponSekolah} onChange={e => setFormData({...formData, teleponSekolah: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1">Email</label>
+                                        <input type="email" value={formData.emailSekolah} onChange={e => setFormData({...formData, emailSekolah: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="border rounded-xl p-6">
+                            <h3 className="font-semibold mb-4">Pengaturan Akademik</h3>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Tahun Ajaran Default</label>
+                                    <input type="text" value={formData.tahunAjaranDefault} onChange={e => setFormData({...formData, tahunAjaranDefault: e.target.value})} className="w-full px-3 py-2 border rounded-lg" placeholder="2024/2025" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Semester Default</label>
+                                    <select value={formData.semesterDefault} onChange={e => setFormData({...formData, semesterDefault: e.target.value})} className="w-full px-3 py-2 border rounded-lg">
+                                        <option value="Ganjil">Ganjil</option>
+                                        <option value="Genap">Genap</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end">
+                            <button type="submit" className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center gap-2">
+                                <Icons.Check /> Simpan Pengaturan
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            );
+        }
+
+
+        // ==========================================
+        // GURU DASHBOARD
+        // ==========================================
+        function GuruDashboard({ user, onLogout }) {
+            const [activeTab, setActiveTab] = useState('home');
+            const [refresh, setRefresh] = useState(0);
+            const setting = DB.getSetting();
+            const guru = DB.getGuruByUserId(user.id);
+            const refreshData = () => setRefresh(r => r + 1);
+
+            const menuItems = [
+                { id: 'home', label: 'Dashboard', icon: <Icons.Chart /> },
+                { id: 'absensi', label: 'Absensi KBM', icon: <Icons.Camera /> },
+                { id: 'jurnal', label: 'Jurnal Kegiatan', icon: <Icons.FileText /> },
+                { id: 'nilai', label: 'Input Nilai', icon: <Icons.Award /> },
+                { id: 'riwayat', label: 'Riwayat Absensi', icon: <Icons.History /> },
+                { id: 'profil', label: 'Profil', icon: <Icons.User /> },
+            ];
+
+            const renderContent = () => {
+                switch(activeTab) {
+                    case 'home': return <GuruHome key={refresh} guru={guru} />;
+                    case 'absensi': return <GuruAbsensi key={refresh} guru={guru} onRefresh={refreshData} />;
+                    case 'jurnal': return <GuruJurnal key={refresh} guru={guru} />;
+                    case 'nilai': return <GuruNilai key={refresh} guru={guru} />;
+                    case 'riwayat': return <GuruRiwayat key={refresh} guru={guru} />;
+                    case 'profil': return <GuruProfil key={refresh} guru={guru} user={user} />;
+                    default: return <GuruHome guru={guru} />;
+                }
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-100">
+                    <header className="bg-slate-900 text-white sticky top-0 z-50">
+                        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-blue-600 rounded-lg flex items-center justify-center text-white">
+                                    <Icons.Book />
+                                </div>
+                                <div>
+                                    <h1 className="text-lg font-bold">E-Jurnal & Absensi</h1>
+                                    <p className="text-xs text-slate-400">{setting.namaSekolah}</p>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-4">
+                                <span className="text-sm hidden sm:inline">{guru?.nama || user.nama}</span>
+                                <button onClick={onLogout} className="flex items-center gap-2 text-sm bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg transition-colors">
+                                    <Icons.Logout /> <span className="hidden sm:inline">Keluar</span>
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+
+                    <div className="max-w-7xl mx-auto px-4 py-6 flex flex-col lg:flex-row gap-6">
+                        <nav className="w-full lg:w-64 flex-shrink-0">
+                            <div className="bg-white rounded-xl shadow-sm p-2 space-y-1 sticky top-24">
+                                {menuItems.map(item => (
+                                    <button 
+                                        key={item.id} 
+                                        onClick={() => setActiveTab(item.id)}
+                                        className={`w-full text-left px-4 py-3 rounded-lg transition-all flex items-center gap-3 ${
+                                            activeTab === item.id 
+                                                ? 'bg-blue-600 text-white shadow-md' 
+                                                : 'hover:bg-gray-100 text-gray-700'
+                                        }`}
+                                    >
+                                        {item.icon}
+                                        <span className="font-medium">{item.label}</span>
+                                    </button>
+                                ))}
+                            </div>
+                        </nav>
+
+                        <main className="flex-1 bg-white rounded-xl shadow-sm p-6 min-h-[600px]">
+                            {renderContent()}
+                        </main>
+                    </div>
+                </div>
+            );
+        }
+
+        // ==========================================
+        // GURU HOME
+        // ==========================================
+        function GuruHome({ guru }) {
+            const setting = DB.getSetting();
+            const jadwal = DB.getJadwalByGuru(guru?.id || '');
+            const absensi = DB.getAbsensiByGuru(guru?.id || '');
+            const today = new Date().toISOString().split('T')[0];
+            const hariIni = new Date().toLocaleDateString('id-ID', { weekday: 'long' });
+            const absensiHariIni = absensi.filter(a => a.tanggal === today).length;
+            const jadwalHariIni = jadwal.filter(j => j.hari === hariIni);
+
+            const stats = [
+                { title: 'Total Jadwal', value: jadwal.length, color: 'from-blue-500 to-blue-600', icon: <Icons.Calendar /> },
+                { title: 'Absensi Hari Ini', value: absensiHariIni, color: 'from-emerald-500 to-emerald-600', icon: <Icons.Check /> },
+                { title: 'Jadwal Hari Ini', value: jadwalHariIni.length, color: 'from-violet-500 to-violet-600', icon: <Icons.Clock /> },
+                { title: 'Total Absensi', value: absensi.length, color: 'from-amber-500 to-amber-600', icon: <Icons.FileText /> },
+            ];
+
+            return (
+                <div className="space-y-6 fade-in">
+                    <div>
+                        <h2 className="text-2xl font-bold text-gray-900">Selamat Datang, {(guru?.nama || 'Guru').split(',')[0]}!</h2>
+                        <p className="text-gray-600">{new Date().toLocaleDateString('id-ID', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                    </div>
+
+                    <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white rounded-xl p-6 shadow-lg">
+                        <div className="flex items-center gap-4">
+                            <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center text-2xl font-bold">
+                                {(guru?.nama || 'G').charAt(0)}
+                            </div>
+                            <div>
+                                <h3 className="text-xl font-semibold">{guru?.nama}</h3>
+                                <p className="text-blue-100">NIP: {guru?.nip}</p>
+                                <p className="text-sm text-blue-200">{setting.namaSekolah}</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {stats.map((stat, i) => (
+                            <div key={i} className={`bg-gradient-to-br ${stat.color} text-white rounded-xl p-4 shadow-md`}>
+                                <div className="opacity-80 mb-2">{stat.icon}</div>
+                                <p className="text-2xl font-bold">{stat.value}</p>
+                                <p className="text-sm opacity-90">{stat.title}</p>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="border rounded-xl p-4">
+                        <h3 className="font-semibold mb-4 flex items-center gap-2">
+                            <Icons.Calendar /> Jadwal Hari Ini ({hariIni})
+                        </h3>
+                        <div className="space-y-3">
+                            {jadwalHariIni.length > 0 ? jadwalHariIni.sort((a, b) => parseInt(a.jamKe) - parseInt(b.jamKe)).map(j => (
+                                <div key={j.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                                    <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center font-bold">
+                                        {j.jamKe}
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="font-medium">{DB.getMapelById(j.mapelId)?.nama}</p>
+                                        <p className="text-sm text-gray-600">{DB.getKelasById(j.kelasId)?.nama} • {j.ruangan || '-'}</p>
+                                    </div>
+                                </div>
+                            )) : <p className="text-gray-500 text-center py-4">Tidak ada jadwal hari ini</p>}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ==========================================
+        // GURU ABSENSI (with Camera & Location)
+        // ==========================================
+        function GuruAbsensi({ guru, onRefresh }) {
+            const [jadwal] = useState(DB.getJadwalByGuru(guru?.id || ''));
+            const [showForm, setShowForm] = useState(false);
+            const [capturedImage, setCapturedImage] = useState(null);
+            const [location, setLocation] = useState(null);
+            const [loadingLocation, setLoadingLocation] = useState(false);
+            const videoRef = useRef(null);
+            const canvasRef = useRef(null);
+            const [stream, setStream] = useState(null);
+
+            const [formData, setFormData] = useState({
+                jadwalId: '', kelasId: '', mapelId: '', jamKe: '',
+                materi: '', deskripsi: '', keterangan: '',
+                siswaTidakHadir: [], jumlahSiswa: 0, siswaHadir: 0
+            });
+            const [siswa, setSiswa] = useState([]);
+
+            const hariIni = new Date().toLocaleDateString('id-ID', { weekday: 'long' });
+            const jadwalHariIni = jadwal.filter(j => j.hari === hariIni);
+
+            useEffect(() => {
+                if (formData.kelasId) {
+                    setSiswa(DB.getSiswaByKelas(formData.kelasId));
+                }
+            }, [formData.kelasId]);
+
+            const startCamera = async () => {
+                try {
+                    const mediaStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+                    setStream(mediaStream);
+                    if (videoRef.current) {
+                        videoRef.current.srcObject = mediaStream;
+                    }
+                } catch (err) {
+                    alert('Tidak dapat mengakses kamera: ' + err.message);
+                }
+            };
+
+            const stopCamera = () => {
+                if (stream) {
+                    stream.getTracks().forEach(track => track.stop());
+                    setStream(null);
+                }
+            };
+
+            const capturePhoto = () => {
+                if (videoRef.current && canvasRef.current) {
+                    const canvas = canvasRef.current;
+                    const video = videoRef.current;
+                    canvas.width = video.videoWidth;
+                    canvas.height = video.videoHeight;
+                    canvas.getContext('2d').drawImage(video, 0, 0);
+                    setCapturedImage(canvas.toDataURL('image/jpeg'));
+                    stopCamera();
+                }
+            };
+
+            const getLocation = () => {
+                setLoadingLocation(true);
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        (position) => {
+                            setLocation({
+                                lat: position.coords.latitude,
+                                lng: position.coords.longitude,
+                                accuracy: position.coords.accuracy
+                            });
+                            setLoadingLocation(false);
+                        },
+                        (error) => {
+                            alert('Gagal mendapatkan lokasi: ' + error.message);
+                            setLoadingLocation(false);
+                        }
+                    );
+                } else {
+                    alert('Browser tidak mendukung geolocation');
+                    setLoadingLocation(false);
+                }
+            };
+
+            const handleJadwalChange = (jadwalId) => {
+                const selected = jadwal.find(j => j.id === jadwalId);
+                if (selected) {
+                    setFormData({
+                        ...formData, jadwalId, kelasId: selected.kelasId,
+                        mapelId: selected.mapelId, jamKe: selected.jamKe
+                    });
+                }
+            };
+
+            const toggleSiswaTidakHadir = (siswaId) => {
+                const current = formData.siswaTidakHadir;
+                if (current.includes(siswaId)) {
+                    setFormData({ ...formData, siswaTidakHadir: current.filter(id => id !== siswaId) });
+                } else {
+                    setFormData({ ...formData, siswaTidakHadir: [...current, siswaId] });
+                }
+            };
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (!capturedImage) {
+                    alert('Silakan ambil foto selfie terlebih dahulu');
+                    return;
+                }
+                if (!location) {
+                    alert('Silakan ambil lokasi terlebih dahulu');
+                    return;
+                }
+
+                const jumlahSiswa = siswa.length;
+                const siswaTidakHadirList = formData.siswaTidakHadir;
+                const siswaHadir = jumlahSiswa - siswaTidakHadirList.length;
+
+                DB.saveAbsensi({
+                    id: 'absensi-' + Date.now(),
+                    guruId: guru.id,
+                    ...formData,
+                    jumlahSiswa,
+                    siswaHadir,
+                    siswaTidakHadir: siswaTidakHadirList.length,
+                    fotoSelfie: capturedImage,
+                    lokasi: location,
+                    tanggal: new Date().toISOString().split('T')[0],
+                    createdAt: new Date().toISOString()
+                });
+
+                alert('Absensi berhasil disimpan!');
+                setShowForm(false);
+                setCapturedImage(null);
+                setLocation(null);
+                setFormData({
+                    jadwalId: '', kelasId: '', mapelId: '', jamKe: '',
+                    materi: '', deskripsi: '', keterangan: '',
+                    siswaTidakHadir: [], jumlahSiswa: 0, siswaHadir: 0
+                });
+                onRefresh();
+            };
+
+            return (
+                <div className="fade-in">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                        <h2 className="text-xl font-bold">Absensi KBM</h2>
+                        <button onClick={() => { setShowForm(true); startCamera(); }} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700">
+                            <Icons.Plus /> Input Absensi
+                        </button>
+                    </div>
+
+                    <div className="border rounded-xl p-4 mb-6">
+                        <h3 className="font-semibold mb-4">Jadwal Hari Ini ({hariIni})</h3>
+                        <div className="space-y-3">
+                            {jadwalHariIni.length > 0 ? jadwalHariIni.sort((a, b) => parseInt(a.jamKe) - parseInt(b.jamKe)).map(j => (
+                                <div key={j.id} className="flex items-center gap-4 p-3 bg-gray-50 rounded-lg">
+                                    <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center font-bold">
+                                        {j.jamKe}
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="font-medium">{DB.getMapelById(j.mapelId)?.nama}</p>
+                                        <p className="text-sm text-gray-600">{DB.getKelasById(j.kelasId)?.nama}</p>
+                                    </div>
+                                </div>
+                            )) : <p className="text-gray-500 text-center py-4">Tidak ada jadwal hari ini</p>}
+                        </div>
+                    </div>
+
+                    <Modal isOpen={showForm} onClose={() => { setShowForm(false); stopCamera(); }} title="Input Absensi KBM" maxWidth="max-w-4xl">
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Pilih Jadwal *</label>
+                                    <select required value={formData.jadwalId} onChange={e => handleJadwalChange(e.target.value)} className="w-full px-3 py-2 border rounded-lg">
+                                        <option value="">-- Pilih Jadwal --</option>
+                                        {jadwalHariIni.map(j => (
+                                            <option key={j.id} value={j.id}>
+                                                Jam {j.jamKe} - {DB.getMapelById(j.mapelId)?.nama} ({DB.getKelasById(j.kelasId)?.nama})
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Jam Pelajaran</label>
+                                    <input type="text" disabled value={formData.jamKe ? 'Jam ' + formData.jamKe : ''} className="w-full px-3 py-2 border rounded-lg bg-gray-100" />
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Materi Pembelajaran *</label>
+                                <input type="text" required value={formData.materi} onChange={e => setFormData({...formData, materi: e.target.value})} className="w-full px-3 py-2 border rounded-lg" placeholder="Judul materi yang diajarkan" />
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Deskripsi Kegiatan</label>
+                                <textarea value={formData.deskripsi} onChange={e => setFormData({...formData, deskripsi: e.target.value})} className="w-full px-3 py-2 border rounded-lg" rows="2" placeholder="Uraian singkat kegiatan pembelajaran"></textarea>
+                            </div>
+
+                            {siswa.length > 0 && (
+                                <div>
+                                    <label className="block text-sm font-medium mb-2">Siswa Tidak Hadir ({formData.siswaTidakHadir.length}/{siswa.length})</label>
+                                    <div className="max-h-40 overflow-y-auto border rounded-lg p-2 space-y-1">
+                                        {siswa.map(s => (
+                                            <label key={s.id} className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer">
+                                                <input 
+                                                    type="checkbox" 
+                                                    checked={formData.siswaTidakHadir.includes(s.id)}
+                                                    onChange={() => toggleSiswaTidakHadir(s.id)}
+                                                    className="w-4 h-4"
+                                                />
+                                                <span>{s.nis} - {s.nama}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Foto Selfie *</label>
+                                    <div className="border rounded-lg p-2">
+                                        {!capturedImage ? (
+                                            <div className="space-y-2">
+                                                <video ref={videoRef} autoPlay playsInline className="w-full h-40 bg-gray-900 rounded" />
+                                                <button type="button" onClick={capturePhoto} className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
+                                                    Ambil Foto
+                                                </button>
+                                            </div>
+                                        ) : (
+                                            <div className="space-y-2">
+                                                <img src={capturedImage} alt="Captured" className="w-full h-40 object-cover rounded" />
+                                                <button type="button" onClick={() => { setCapturedImage(null); startCamera(); }} className="w-full bg-gray-600 text-white py-2 rounded hover:bg-gray-700">
+                                                    Ulangi Foto
+                                                </button>
+                                            </div>
+                                        )}
+                                        <canvas ref={canvasRef} className="hidden" />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Lokasi *</label>
+                                    <div className="border rounded-lg p-2">
+                                        {!location ? (
+                                            <button 
+                                                type="button" 
+                                                onClick={getLocation} 
+                                                disabled={loadingLocation}
+                                                className="w-full bg-emerald-600 text-white py-8 rounded hover:bg-emerald-700 disabled:opacity-50"
+                                            >
+                                                {loadingLocation ? 'Mendeteksi...' : 'Ambil Lokasi'}
+                                            </button>
+                                        ) : (
+                                            <div className="text-sm py-6">
+                                                <p className="text-green-600 font-medium">Lokasi terekam</p>
+                                                <p className="text-gray-600">Lat: {location.lat.toFixed(6)}</p>
+                                                <p className="text-gray-600">Lng: {location.lng.toFixed(6)}</p>
+                                                <button type="button" onClick={getLocation} className="text-blue-600 text-xs mt-2">Ulangi</button>
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Keterangan Tambahan</label>
+                                <textarea value={formData.keterangan} onChange={e => setFormData({...formData, keterangan: e.target.value})} className="w-full px-3 py-2 border rounded-lg" rows="2" placeholder="Keterangan tambahan (opsional)"></textarea>
+                            </div>
+
+                            <div className="flex justify-end gap-2 pt-4">
+                                <button type="button" onClick={() => { setShowForm(false); stopCamera(); }} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Batal</button>
+                                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Simpan Absensi</button>
+                            </div>
+                        </form>
+                    </Modal>
+                </div>
+            );
+        }
+
+
+        // ==========================================
+        // GURU JURNAL
+        // ==========================================
+        function GuruJurnal({ guru }) {
+            const [jurnal, setJurnal] = useState(DB.getJurnalByGuru(guru?.id || ''));
+            const [kelas] = useState(DB.getKelas());
+            const [mapel] = useState(DB.getMapel());
+            const [showForm, setShowForm] = useState(false);
+            const [editing, setEditing] = useState(null);
+            const [formData, setFormData] = useState({
+                tanggal: new Date().toISOString().split('T')[0],
+                kelasId: '', mapelId: '', jamKe: '',
+                materi: '', deskripsi: '', catatan: ''
+            });
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                if (editing) {
+                    DB.saveJurnal({ ...editing, ...formData });
+                } else {
+                    DB.saveJurnal({
+                        id: 'jurnal-' + Date.now(),
+                        guruId: guru.id,
+                        ...formData,
+                        createdAt: new Date().toISOString()
+                    });
+                }
+                setJurnal(DB.getJurnalByGuru(guru.id));
+                setShowForm(false);
+                setEditing(null);
+                setFormData({
+                    tanggal: new Date().toISOString().split('T')[0],
+                    kelasId: '', mapelId: '', jamKe: '',
+                    materi: '', deskripsi: '', catatan: ''
+                });
+            };
+
+            const handleEdit = (j) => {
+                setEditing(j);
+                setFormData({
+                    tanggal: j.tanggal, kelasId: j.kelasId, mapelId: j.mapelId,
+                    jamKe: j.jamKe, materi: j.materi, deskripsi: j.deskripsi || '', catatan: j.catatan || ''
+                });
+                setShowForm(true);
+            };
+
+            const handleDelete = (id) => {
+                if (confirm('Yakin hapus jurnal?')) {
+                    DB.deleteJurnal(id);
+                    setJurnal(DB.getJurnalByGuru(guru.id));
+                }
+            };
+
+            return (
+                <div className="fade-in">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                        <h2 className="text-xl font-bold">Jurnal Kegiatan Kelas</h2>
+                        <button onClick={() => setShowForm(true)} className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700">
+                            <Icons.Plus /> Tambah Jurnal
+                        </button>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Tanggal</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Kelas</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Mapel</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Jam</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Materi</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Aksi</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {jurnal.sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal)).map(j => (
+                                    <tr key={j.id} className="hover:bg-gray-50">
+                                        <td className="px-4 py-3">{j.tanggal}</td>
+                                        <td className="px-4 py-3">{DB.getKelasById(j.kelasId)?.nama}</td>
+                                        <td className="px-4 py-3">{DB.getMapelById(j.mapelId)?.nama}</td>
+                                        <td className="px-4 py-3">Jam {j.jamKe}</td>
+                                        <td className="px-4 py-3 max-w-xs truncate">{j.materi}</td>
+                                        <td className="px-4 py-3">
+                                            <div className="flex gap-2">
+                                                <button onClick={() => handleEdit(j)} className="p-2 text-blue-600 hover:bg-blue-50 rounded"><Icons.Edit /></button>
+                                                <button onClick={() => handleDelete(j.id)} className="p-2 text-red-600 hover:bg-red-50 rounded"><Icons.Trash /></button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        {jurnal.length === 0 && <p className="text-center py-8 text-gray-500">Belum ada jurnal</p>}
+                    </div>
+
+                    <Modal isOpen={showForm} onClose={() => { setShowForm(false); setEditing(null); }} title={editing ? 'Edit Jurnal' : 'Tambah Jurnal'}>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Tanggal *</label>
+                                    <input type="date" required value={formData.tanggal} onChange={e => setFormData({...formData, tanggal: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Jam Ke *</label>
+                                    <input type="number" required value={formData.jamKe} onChange={e => setFormData({...formData, jamKe: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Kelas *</label>
+                                    <select required value={formData.kelasId} onChange={e => setFormData({...formData, kelasId: e.target.value})} className="w-full px-3 py-2 border rounded-lg">
+                                        <option value="">-- Pilih Kelas --</option>
+                                        {kelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Mata Pelajaran *</label>
+                                    <select required value={formData.mapelId} onChange={e => setFormData({...formData, mapelId: e.target.value})} className="w-full px-3 py-2 border rounded-lg">
+                                        <option value="">-- Pilih Mapel --</option>
+                                        {mapel.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Materi Pembelajaran *</label>
+                                <input type="text" required value={formData.materi} onChange={e => setFormData({...formData, materi: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Deskripsi Kegiatan</label>
+                                <textarea value={formData.deskripsi} onChange={e => setFormData({...formData, deskripsi: e.target.value})} className="w-full px-3 py-2 border rounded-lg" rows="3"></textarea>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Catatan</label>
+                                <textarea value={formData.catatan} onChange={e => setFormData({...formData, catatan: e.target.value})} className="w-full px-3 py-2 border rounded-lg" rows="2" placeholder="Catatan khusus (opsional)"></textarea>
+                            </div>
+                            <div className="flex justify-end gap-2 pt-4">
+                                <button type="button" onClick={() => { setShowForm(false); setEditing(null); }} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Batal</button>
+                                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">{editing ? 'Simpan' : 'Tambah'}</button>
+                            </div>
+                        </form>
+                    </Modal>
+                </div>
+            );
+        }
+
+        // ==========================================
+        // GURU NILAI
+        // ==========================================
+        function GuruNilai({ guru }) {
+            const [kelas] = useState(DB.getKelas());
+            const [mapel] = useState(DB.getMapel());
+            const [siswa, setSiswa] = useState([]);
+            const [selectedKelas, setSelectedKelas] = useState('');
+            const [selectedMapel, setSelectedMapel] = useState('');
+            const [selectedSemester, setSelectedSemester] = useState('Ganjil');
+            const [showForm, setShowForm] = useState(false);
+            const [editingSiswa, setEditingSiswa] = useState(null);
+            const [formData, setFormData] = useState({
+                nilaiHarian: '', nilaiUlangan: '', nilaiTugas: '', nilaiUTS: '', nilaiUAS: ''
+            });
+
+            useEffect(() => {
+                if (selectedKelas) {
+                    setSiswa(DB.getSiswaByKelas(selectedKelas));
+                }
+            }, [selectedKelas]);
+
+            const getNilaiSiswa = (siswaId) => {
+                return DB.getNilaiBySiswa(siswaId).find(n => 
+                    n.mapelId === selectedMapel && n.semester === selectedSemester
+                );
+            };
+
+            const handleEditNilai = (s) => {
+                setEditingSiswa(s);
+                const existing = getNilaiSiswa(s.id);
+                setFormData({
+                    nilaiHarian: existing?.nilaiHarian || '',
+                    nilaiUlangan: existing?.nilaiUlangan || '',
+                    nilaiTugas: existing?.nilaiTugas || '',
+                    nilaiUTS: existing?.nilaiUTS || '',
+                    nilaiUAS: existing?.nilaiUAS || ''
+                });
+                setShowForm(true);
+            };
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                const existing = getNilaiSiswa(editingSiswa.id);
+                const nilaiData = {
+                    id: existing?.id || 'nilai-' + Date.now(),
+                    siswaId: editingSiswa.id,
+                    mapelId: selectedMapel,
+                    semester: selectedSemester,
+                    ...formData,
+                    updatedAt: new Date().toISOString()
+                };
+                DB.saveNilai(nilaiData);
+                setShowForm(false);
+                setEditingSiswa(null);
+                setFormData({ nilaiHarian: '', nilaiUlangan: '', nilaiTugas: '', nilaiUTS: '', nilaiUAS: '' });
+            };
+
+            const hitungRataRata = (n) => {
+                if (!n) return '-';
+                const nilaiList = [n.nilaiHarian, n.nilaiUlangan, n.nilaiTugas, n.nilaiUTS, n.nilaiUAS].filter(v => v);
+                if (nilaiList.length === 0) return '-';
+                const rata = nilaiList.reduce((a, b) => parseFloat(a) + parseFloat(b), 0) / nilaiList.length;
+                return rata.toFixed(2);
+            };
+
+            return (
+                <div className="fade-in">
+                    <h2 className="text-xl font-bold mb-6">Input Nilai Siswa</h2>
+
+                    <div className="grid grid-cols-3 gap-4 mb-6">
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Kelas</label>
+                            <select value={selectedKelas} onChange={e => setSelectedKelas(e.target.value)} className="w-full px-3 py-2 border rounded-lg">
+                                <option value="">-- Pilih Kelas --</option>
+                                {kelas.map(k => <option key={k.id} value={k.id}>{k.nama}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Mata Pelajaran</label>
+                            <select value={selectedMapel} onChange={e => setSelectedMapel(e.target.value)} className="w-full px-3 py-2 border rounded-lg">
+                                <option value="">-- Pilih Mapel --</option>
+                                {mapel.map(m => <option key={m.id} value={m.id}>{m.nama}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Semester</label>
+                            <select value={selectedSemester} onChange={e => setSelectedSemester(e.target.value)} className="w-full px-3 py-2 border rounded-lg">
+                                <option value="Ganjil">Ganjil</option>
+                                <option value="Genap">Genap</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    {selectedKelas && selectedMapel && (
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">NIS</th>
+                                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Nama</th>
+                                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Harian</th>
+                                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Ulangan</th>
+                                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Tugas</th>
+                                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">UTS</th>
+                                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">UAS</th>
+                                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Rata-rata</th>
+                                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Aksi</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y">
+                                    {siswa.map(s => {
+                                        const n = getNilaiSiswa(s.id);
+                                        return (
+                                            <tr key={s.id} className="hover:bg-gray-50">
+                                                <td className="px-4 py-3">{s.nis}</td>
+                                                <td className="px-4 py-3 font-medium">{s.nama}</td>
+                                                <td className="px-4 py-3">{n?.nilaiHarian || '-'}</td>
+                                                <td className="px-4 py-3">{n?.nilaiUlangan || '-'}</td>
+                                                <td className="px-4 py-3">{n?.nilaiTugas || '-'}</td>
+                                                <td className="px-4 py-3">{n?.nilaiUTS || '-'}</td>
+                                                <td className="px-4 py-3">{n?.nilaiUAS || '-'}</td>
+                                                <td className="px-4 py-3 font-semibold">{hitungRataRata(n)}</td>
+                                                <td className="px-4 py-3">
+                                                    <button onClick={() => handleEditNilai(s)} className="p-2 text-blue-600 hover:bg-blue-50 rounded"><Icons.Edit /></button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                            {siswa.length === 0 && <p className="text-center py-8 text-gray-500">Tidak ada siswa di kelas ini</p>}
+                        </div>
+                    )}
+
+                    <Modal isOpen={showForm} onClose={() => { setShowForm(false); setEditingSiswa(null); }} title={'Input Nilai - ' + (editingSiswa?.nama || '')}>
+                        <form onSubmit={handleSubmit} className="space-y-4">
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Nilai Harian</label>
+                                    <input type="number" min="0" max="100" value={formData.nilaiHarian} onChange={e => setFormData({...formData, nilaiHarian: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Nilai Ulangan</label>
+                                    <input type="number" min="0" max="100" value={formData.nilaiUlangan} onChange={e => setFormData({...formData, nilaiUlangan: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Nilai Tugas</label>
+                                    <input type="number" min="0" max="100" value={formData.nilaiTugas} onChange={e => setFormData({...formData, nilaiTugas: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Nilai UTS</label>
+                                    <input type="number" min="0" max="100" value={formData.nilaiUTS} onChange={e => setFormData({...formData, nilaiUTS: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Nilai UAS</label>
+                                    <input type="number" min="0" max="100" value={formData.nilaiUAS} onChange={e => setFormData({...formData, nilaiUAS: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-2 pt-4">
+                                <button type="button" onClick={() => { setShowForm(false); setEditingSiswa(null); }} className="px-4 py-2 border rounded-lg hover:bg-gray-50">Batal</button>
+                                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Simpan Nilai</button>
+                            </div>
+                        </form>
+                    </Modal>
+                </div>
+            );
+        }
+
+
+        // ==========================================
+        // GURU RIWAYAT
+        // ==========================================
+        function GuruRiwayat({ guru }) {
+            const [absensi, setAbsensi] = useState(DB.getAbsensiByGuru(guru?.id || ''));
+            const [filterBulan, setFilterBulan] = useState('');
+            const [filterTahun, setFilterTahun] = useState(new Date().getFullYear().toString());
+
+            const bulanList = [
+                { value: '01', label: 'Januari' },
+                { value: '02', label: 'Februari' },
+                { value: '03', label: 'Maret' },
+                { value: '04', label: 'April' },
+                { value: '05', label: 'Mei' },
+                { value: '06', label: 'Juni' },
+                { value: '07', label: 'Juli' },
+                { value: '08', label: 'Agustus' },
+                { value: '09', label: 'September' },
+                { value: '10', label: 'Oktober' },
+                { value: '11', label: 'November' },
+                { value: '12', label: 'Desember' },
+            ];
+
+            const filtered = absensi.filter(a => {
+                const date = new Date(a.tanggal);
+                const matchBulan = filterBulan ? (date.getMonth() + 1).toString().padStart(2, '0') === filterBulan : true;
+                const matchTahun = filterTahun ? date.getFullYear().toString() === filterTahun : true;
+                return matchBulan && matchTahun;
+            }).sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal));
+
+            const stats = {
+                total: filtered.length,
+                hadir: filtered.reduce((acc, a) => acc + (a.siswaHadir || 0), 0),
+                tidakHadir: filtered.reduce((acc, a) => acc + (a.siswaTidakHadir || 0), 0),
+            };
+
+            const handleExport = () => {
+                const data = filtered.map(a => ({
+                    Tanggal: a.tanggal,
+                    Kelas: DB.getKelasById(a.kelasId)?.nama,
+                    Mapel: DB.getMapelById(a.mapelId)?.nama,
+                    'Jam Ke': a.jamKe,
+                    Materi: a.materi || '-',
+                    'Jumlah Siswa': a.jumlahSiswa || 0,
+                    'Siswa Hadir': a.siswaHadir || 0,
+                    'Siswa Tidak Hadir': a.siswaTidakHadir || 0,
+                    Keterangan: a.keterangan || '-'
+                }));
+                const csv = convertToCSV(data);
+                downloadFile(csv, 'riwayat-absensi-' + (guru?.nama || '') + '-' + filterBulan + '-' + filterTahun + '.csv', 'text/csv');
+            };
+
+            const convertToCSV = (data) => {
+                if (data.length === 0) return '';
+                const headers = Object.keys(data[0]);
+                const rows = data.map(row => headers.map(h => '"' + (row[h] || '') + '"').join(','));
+                return [headers.join(','), ...rows].join('\n');
+            };
+
+            const downloadFile = (content, filename, type) => {
+                const blob = new Blob([content], { type });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.click();
+                URL.revokeObjectURL(url);
+            };
+
+            return (
+                <div className="fade-in">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-6">
+                        <h2 className="text-xl font-bold">Riwayat Absensi</h2>
+                        <button onClick={handleExport} className="bg-emerald-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-emerald-700">
+                            <Icons.Download /> Export
+                        </button>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-4 mb-6">
+                        <div className="bg-blue-50 rounded-xl p-4">
+                            <p className="text-sm text-blue-600">Total Absensi</p>
+                            <p className="text-2xl font-bold text-blue-800">{stats.total}</p>
+                        </div>
+                        <div className="bg-green-50 rounded-xl p-4">
+                            <p className="text-sm text-green-600">Total Siswa Hadir</p>
+                            <p className="text-2xl font-bold text-green-800">{stats.hadir}</p>
+                        </div>
+                        <div className="bg-red-50 rounded-xl p-4">
+                            <p className="text-sm text-red-600">Total Siswa Tidak Hadir</p>
+                            <p className="text-2xl font-bold text-red-800">{stats.tidakHadir}</p>
+                        </div>
+                    </div>
+
+                    <div className="flex gap-4 mb-4">
+                        <select value={filterBulan} onChange={e => setFilterBulan(e.target.value)} className="px-4 py-2 border rounded-lg">
+                            <option value="">Semua Bulan</option>
+                            {bulanList.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
+                        </select>
+                        <input 
+                            type="number" 
+                            value={filterTahun}
+                            onChange={e => setFilterTahun(e.target.value)}
+                            className="px-4 py-2 border rounded-lg w-32"
+                            placeholder="Tahun"
+                        />
+                    </div>
+
+                    <div className="overflow-x-auto">
+                        <table className="w-full">
+                            <thead className="bg-gray-50">
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Tanggal</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Kelas</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Mapel</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Jam</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Materi</th>
+                                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-700">Kehadiran</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {filtered.map(a => (
+                                    <tr key={a.id} className="hover:bg-gray-50">
+                                        <td className="px-4 py-3">{a.tanggal}</td>
+                                        <td className="px-4 py-3">{DB.getKelasById(a.kelasId)?.nama}</td>
+                                        <td className="px-4 py-3">{DB.getMapelById(a.mapelId)?.nama}</td>
+                                        <td className="px-4 py-3">Jam {a.jamKe}</td>
+                                        <td className="px-4 py-3 max-w-xs truncate">{a.materi || '-'}</td>
+                                        <td className="px-4 py-3">
+                                            <span className="text-green-600">{a.siswaHadir || 0} hadir</span>
+                                            {(a.siswaTidakHadir > 0) && (
+                                                <span className="text-red-600 ml-2">{a.siswaTidakHadir} tidak hadir</span>
+                                            )}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        {filtered.length === 0 && <p className="text-center py-8 text-gray-500">Tidak ada data riwayat absensi</p>}
+                    </div>
+                </div>
+            );
+        }
+
+        // ==========================================
+        // GURU PROFIL
+        // ==========================================
+        function GuruProfil({ guru, user }) {
+            const [isEditing, setIsEditing] = useState(false);
+            const [formData, setFormData] = useState({
+                nama: guru?.nama || '',
+                nip: guru?.nip || '',
+                email: guru?.email || '',
+                noTelepon: guru?.noTelepon || '',
+                alamat: guru?.alamat || '',
+                jenisKelamin: guru?.jenisKelamin || 'L',
+                tanggalLahir: guru?.tanggalLahir || '',
+                pendidikan: guru?.pendidikan || ''
+            });
+            const [passwordData, setPasswordData] = useState({ current: '', new: '', confirm: '' });
+            const [showPasswordForm, setShowPasswordForm] = useState(false);
+            const [saved, setSaved] = useState(false);
+
+            const handleSubmit = (e) => {
+                e.preventDefault();
+                DB.saveGuru({ ...guru, ...formData });
+                user.nama = formData.nama;
+                user.email = formData.email;
+                DB.saveUser(user);
+                setSaved(true);
+                setTimeout(() => setSaved(false), 3000);
+                setIsEditing(false);
+            };
+
+            const handlePasswordChange = (e) => {
+                e.preventDefault();
+                if (passwordData.new !== passwordData.confirm) {
+                    alert('Password baru tidak cocok');
+                    return;
+                }
+                if (user.password !== passwordData.current) {
+                    alert('Password saat ini salah');
+                    return;
+                }
+                user.password = passwordData.new;
+                DB.saveUser(user);
+                alert('Password berhasil diubah');
+                setShowPasswordForm(false);
+                setPasswordData({ current: '', new: '', confirm: '' });
+            };
+
+            const jadwal = DB.getJadwalByGuru(guru?.id || '');
+            const mapelIds = [...new Set(jadwal.map(j => j.mapelId))];
+            const mapelList = mapelIds.map(id => DB.getMapelById(id)).filter(Boolean);
+
+            return (
+                <div className="fade-in">
+                    <h2 className="text-xl font-bold mb-6">Profil Guru</h2>
+
+                    {saved && (
+                        <div className="bg-green-50 border border-green-200 text-green-700 p-3 rounded-lg mb-4 flex items-center gap-2">
+                            <Icons.Check /> Profil berhasil diperbarui
+                        </div>
+                    )}
+
+                    <div className="grid md:grid-cols-2 gap-6">
+                        <div className="border rounded-xl p-6">
+                            <div className="flex items-center gap-4 mb-6">
+                                <div className="w-20 h-20 bg-blue-600 text-white rounded-full flex items-center justify-center text-3xl font-bold">
+                                    {(guru?.nama || 'G').charAt(0)}
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-semibold">{guru?.nama}</h3>
+                                    <p className="text-gray-600">{guru?.nip}</p>
+                                    <span className="inline-block mt-1 px-2 py-0.5 bg-green-100 text-green-800 rounded text-xs">{guru?.status || 'Aktif'}</span>
+                                </div>
+                            </div>
+
+                            {!isEditing ? (
+                                <div className="space-y-3">
+                                    <div className="flex justify-between py-2 border-b">
+                                        <span className="text-gray-600">Email</span>
+                                        <span>{guru?.email}</span>
+                                    </div>
+                                    <div className="flex justify-between py-2 border-b">
+                                        <span className="text-gray-600">No. Telepon</span>
+                                        <span>{guru?.noTelepon || '-'}</span>
+                                    </div>
+                                    <div className="flex justify-between py-2 border-b">
+                                        <span className="text-gray-600">Jenis Kelamin</span>
+                                        <span>{guru?.jenisKelamin === 'L' ? 'Laki-laki' : 'Perempuan'}</span>
+                                    </div>
+                                    <div className="flex justify-between py-2 border-b">
+                                        <span className="text-gray-600">Tanggal Lahir</span>
+                                        <span>{guru?.tanggalLahir || '-'}</span>
+                                    </div>
+                                    <div className="flex justify-between py-2 border-b">
+                                        <span className="text-gray-600">Pendidikan</span>
+                                        <span>{guru?.pendidikan || '-'}</span>
+                                    </div>
+                                    <div className="flex justify-between py-2 border-b">
+                                        <span className="text-gray-600">Alamat</span>
+                                        <span className="text-right">{guru?.alamat || '-'}</span>
+                                    </div>
+                                    <button onClick={() => setIsEditing(true)} className="w-full mt-4 bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700">
+                                        Edit Profil
+                                    </button>
+                                </div>
+                            ) : (
+                                <form onSubmit={handleSubmit} className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1">Nama</label>
+                                        <input type="text" value={formData.nama} onChange={e => setFormData({...formData, nama: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1">Email</label>
+                                        <input type="email" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1">No. Telepon</label>
+                                        <input type="text" value={formData.noTelepon} onChange={e => setFormData({...formData, noTelepon: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1">Pendidikan</label>
+                                        <input type="text" value={formData.pendidikan} onChange={e => setFormData({...formData, pendidikan: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1">Alamat</label>
+                                        <textarea value={formData.alamat} onChange={e => setFormData({...formData, alamat: e.target.value})} className="w-full px-3 py-2 border rounded-lg" rows="2"></textarea>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button type="button" onClick={() => setIsEditing(false)} className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50">Batal</button>
+                                        <button type="submit" className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Simpan</button>
+                                    </div>
+                                </form>
+                            )}
+                        </div>
+
+                        <div className="space-y-6">
+                            <div className="border rounded-xl p-6">
+                                <h3 className="font-semibold mb-4">Mata Pelajaran yang Diampu</h3>
+                                <div className="flex flex-wrap gap-2">
+                                    {mapelList.map(m => (
+                                        <span key={m.id} className="bg-amber-100 text-amber-800 px-3 py-1.5 rounded-lg text-sm">
+                                            {m.nama}
+                                        </span>
+                                    ))}
+                                    {mapelList.length === 0 && <p className="text-gray-500">Belum ada jadwal mengajar</p>}
+                                </div>
+                            </div>
+
+                            <div className="border rounded-xl p-6">
+                                <h3 className="font-semibold mb-4">Keamanan</h3>
+                                {!showPasswordForm ? (
+                                    <button onClick={() => setShowPasswordForm(true)} className="w-full bg-slate-700 text-white py-2 rounded-lg hover:bg-slate-800">
+                                        Ubah Password
+                                    </button>
+                                ) : (
+                                    <form onSubmit={handlePasswordChange} className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">Password Saat Ini</label>
+                                            <input type="password" required value={passwordData.current} onChange={e => setPasswordData({...passwordData, current: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">Password Baru</label>
+                                            <input type="password" required value={passwordData.new} onChange={e => setPasswordData({...passwordData, new: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">Konfirmasi Password Baru</label>
+                                            <input type="password" required value={passwordData.confirm} onChange={e => setPasswordData({...passwordData, confirm: e.target.value})} className="w-full px-3 py-2 border rounded-lg" />
+                                        </div>
+                                        <div className="flex gap-2">
+                                            <button type="button" onClick={() => setShowPasswordForm(false)} className="flex-1 px-4 py-2 border rounded-lg hover:bg-gray-50">Batal</button>
+                                            <button type="submit" className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Ubah Password</button>
+                                        </div>
+                                    </form>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // ==========================================
+        // MAIN APP
+        // ==========================================
+        function App() {
+            const [user, setUser] = useState(DB.getCurrentUser());
+
+            const handleLogin = (loggedInUser) => {
+                setUser(loggedInUser);
+            };
+
+            const handleLogout = () => {
+                DB.setCurrentUser(null);
+                setUser(null);
+            };
+
+            if (!user) {
+                return <Login onLogin={handleLogin} />;
+            }
+
+            if (user.role === 'admin') {
+                return <AdminDashboard onLogout={handleLogout} />;
+            }
+
+            return <GuruDashboard user={user} onLogout={handleLogout} />;
+        }
+
+        // Render App
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
